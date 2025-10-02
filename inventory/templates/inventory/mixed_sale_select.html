@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Mixed-Item Sale Builder - {{ SHOP_NAME }}</title>
+    <style>
+        /* General Pagination Styling */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 25px;
+            font-size: 1.1em;
+        }
+
+        /* Styling for the pagination buttons/spans */
+        .pagination a, .pagination span {
+            border: 1px solid #ccc;
+            padding: 8px 15px;
+            margin: 0 5px;
+            text-decoration: none;
+            color: #007bff; /* Blue for links */
+            border-radius: 4px;
+            background-color: #fff;
+            transition: background-color 0.2s, border-color 0.2s;
+            cursor: pointer;
+        }
+
+        /* Styling for the current page indicator (Page X of Y) */
+        .pagination .current {
+            background-color: #ADD8E6; /* Light blue, similar to your screenshot */
+            border-color: #007bff; /* Blue border */
+            color: #000;
+            font-weight: bold;
+            pointer-events: none; /* Disable click on the current page indicator */
+        }
+        
+        /* Hover effect for clickable links */
+        .pagination a:hover {
+            background-color: #f0f0f0;
+            border-color: #999;
+        }
+    </style>
+</head>
+<body>
+    {% load static %}
+    {% include "inventory/messages_partial.html" %}
+
+    <header style="border-bottom: 1px solid #ccc; padding: 10px; margin-bottom: 20px;">
+        <img src="{{ SHOP_LOGO_URL }}" alt="{{ SHOP_NAME }} Logo" style="height: 50px; float: left; margin-right: 15px;">
+        <h1>{{ SHOP_NAME }} | Mixed-Item Sale Builder</h1>
+        <div style="clear: both;"></div>
+    </header>
+
+    <p><a href="{% url 'asset_list' %}">← Back to Inventory</a></p>
+
+        <h2>Assets Available to Sell ({{ num_items }} Total)</h2>
+
+    <form method="post" action="{% url 'start_mixed_sale' %}">
+        {% csrf_token %}
+        <table border="1" style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background-color: #f2f2f2;">
+                    <th>Select</th>
+                    <th>Asset Type</th>
+                    <th>Model / S/N</th>
+                    <th>Status</th>
+                    <th>Purchase Price</th>
+                </tr>
+            </thead>
+            <tbody>
+                                {% for asset in assets %} 
+                    <tr>
+                        <td>
+                            <input type="checkbox" name="selected_assets" value="{{ asset.pk }}">
+                        </td>
+                        <td>{{ asset.asset_type.name }}</td>
+                        <td>{{ asset.asset_type.model_number }} / {{ asset.serial_number }}</td>
+                        <td>{{ asset.status }}</td>
+                        <td>${{ asset.purchase_price|floatformat:2 }}</td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="5">No assets available for sale.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <div class="pagination">
+    {% if assets.has_previous %}
+        <a href="?page={{ assets.previous_page_number }}">« Previous</a> 
+    {% endif %}
+
+    <span class="current">
+        Page {{ assets.number }} of {{ assets.paginator.num_pages }}
+    </span>
+
+    {% if assets.has_next %}
+        <a href="?page={{ assets.next_page_number }}">Next »</a>
+    {% endif %}
+</div>
+                
+        <button type="submit" style="padding: 10px 20px; margin-top: 20px; background-color: purple; color: white; font-size: 1.1em;">
+            Proceed to Checkout (Finalize Sale)
+        </button>
+    </form>
+</body>
+</html>

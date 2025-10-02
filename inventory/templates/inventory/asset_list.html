@@ -1,0 +1,176 @@
+{% load mathfilters %} 
+{% load cart_filters %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Asset Inventory - {{ SHOP_NAME }}</title>
+</head>
+<body>
+    {% if messages %}
+<ul class="messages" style="list-style-type: none; padding: 0;">
+    {% for message in messages %}
+    <li{% if message.tags %} class="{{ message.tags }}"{% endif %} style="padding: 10px; margin-bottom: 10px; border-radius: 5px; 
+        {% if 'success' in message.tags %}background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;
+        {% elif 'error' in message.tags %}background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;
+        {% elif 'warning' in message.tags %}background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba;
+        {% endif %}">
+        {{ message }}
+    </li>
+    {% endfor %}
+</ul>
+{% endif %}
+
+    <header style="border-bottom: 1px solid #ccc; padding: 10px; margin-bottom: 20px;">
+        <img src="{{ SHOP_LOGO_URL }}" alt="{{ SHOP_NAME }} Logo" style="height: 50px; float: left; margin-right: 15px;">
+        <h1>{{ SHOP_NAME }} | Inventory List</h1>
+        <div style="clear: both;"></div>
+    </header>
+    <div style="margin-bottom: 20px;">
+        <a href="{% url 'add_asset' %}" style="padding: 8px 15px; background-color: blue; color: white; text-decoration: none;">+ Add New Asset</a>
+        
+        <a href="{% url 'bulk_sale' %}" style="padding: 8px 15px; background-color: darkgreen; color: white; text-decoration: none; margin-left: 10px;">Quick Bulk Sale (Same Type)</a>
+        
+        <a href="{% url 'start_mixed_sale' %}" style="padding: 8px 15px; background-color: purple; color: white; text-decoration: none; margin-left: 10px;">Start Mixed Sale (Multi-Item Cart)</a>
+
+    </div>
+    <form method="get" action="{% url 'asset_list' %}" style="margin-bottom: 20px; padding: 10px; border: 1px solid #eee;">
+        <label for="asset-type-filter" style="margin-right: 20px;">Filter by Type:</label>
+<select name="asset_type" id="asset-type-filter" onchange="this.form.submit()">
+    <option value="">-- All Types --</option>
+    
+    {% for asset_type in ALL_ASSET_TYPES %}
+        <option value="{{ asset_type.pk }}" {% if current_asset_type|stringformat:"s" == asset_type.pk|stringformat:"s" %}selected{% endif %}>
+            {{ asset_type.name }}
+        </option>
+    {% endfor %}
+</select>
+
+<label for="status" style="margin-left: 20px;">Filter by Status:</label>
+<select name="status" id="status" onchange="this.form.submit()">
+    <option value="">-- All Statuses --</option>
+    {% for status_code, status_name in STATUS_CHOICES %}
+        <option value="{{ status_code }}" 
+            {% if current_status == status_code %}selected{% endif %}>
+            {{ status_name }}
+        </option>
+    {% endfor %}
+</select>
+
+<label for="location" style="margin-left: 20px;">Filter by Location:</label>
+<select name="location" id="location" onchange="this.form.submit()">
+    <option value="">-- All Locations --</option>
+    {% for location_code, location_name in LOCATIONS %}
+        <option value="{{ location_code }}" 
+            {% if current_location == location_code %}selected{% endif %}>
+            {{ location_name }}
+        </option>
+    {% endfor %}
+</select>
+    </form>
+
+    {% if assets %}
+        <table border="1" style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr>
+                    <th>Asset ID</th>
+                    <th>Type</th>
+                    <th>Model</th>
+                    <th>Serial Number</th>
+                    <th>Location</th>
+                    <th>Status</th>
+                    <th>Purchase Price</th> 
+                    <th>Sale Price</th>
+                    <th>Profit/Loss</th>
+                    <th>Details</th> 
+                </tr>
+            </thead>
+            <tbody>
+                {% for asset in assets %}
+                {% with sale_record=asset.sale_record %}
+                <tr style="background-color: 
+                    {% if asset.status == 'SOLD' %}#d4edda;
+                    {% elif asset.status == 'SCRAPPED' %}#f8d7da;
+                    {% elif asset.status == 'PENDING_SALE' %}#fff3cd;
+                    {% else %}white;
+                    {% endif %}
+                ">
+                    <td>{{ asset.pk }}</td> 
+                    
+                    <td>{{ asset.asset_type.name }}</td>
+                    
+                    <td>{{ asset.model_number }}</td>
+                    
+                    <td>{{ asset.serial_number }}</td>
+                    
+                    <td>{{ asset.get_location_display }}</td>
+                    
+                    <td>{{ asset.get_status_display }}</td>
+                    
+                    <td>${{ asset.purchase_price|floatformat:2 }}</td>
+
+                    <td>
+                        {% if sale_record %}
+                            ${{ sale_record.sale_price|floatformat:2 }}
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+
+                    <td style="color: 
+                        {% if sale_record and sale_record.profit_loss >= 0 %}green;
+                        {% elif sale_record and sale_record.profit_loss < 0 %}red;
+                        {% else %}gray;
+                        {% endif %}
+                    ">
+                        {% if sale_record %}
+                            {% if sale_record.profit_loss < 0 %}
+                                (${{ sale_record.profit_loss|abs|floatformat:2 }}) 
+                            {% else %}
+                                ${{ sale_record.profit_loss|floatformat:2 }}
+                            {% endif %}
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+
+                    <td>
+                        <a href="{% url 'asset_detail' pk=asset.pk %}">View Details</a>
+                    </td>
+                </tr>
+                {% endwith %}
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No assets found in the inventory with the current filters.</p>
+    {% endif %}
+
+    {% if assets.has_other_pages %}
+    <div class="pagination" style="margin-top: 20px; text-align: center;">
+        
+        {% if assets.has_previous %}
+            <a href="?page={{ assets.previous_page_number }}{% current_query %}" 
+               style="padding: 5px 10px; border: 1px solid #ccc; margin-right: 10px; text-decoration: none;">&laquo; Previous</a>
+        {% else %}
+            <span style="padding: 5px 10px; border: 1px solid #eee; color: #ccc; margin-right: 10px;">&laquo; Previous</span>
+        {% endif %}
+
+        <span class="current" style="padding: 5px 10px; border: 1px solid blue; background-color: lightblue;">
+            Page {{ assets.number }} of {{ assets.paginator.num_pages }}
+        </span>
+
+        {% if assets.has_next %}
+            <a href="?page={{ assets.next_page_number }}{% current_query %}" 
+               style="padding: 5px 10px; border: 1px solid #ccc; margin-left: 10px; text-decoration: none;">Next &raquo;</a>
+        {% else %}
+            <span style="padding: 5px 10px; border: 1px solid #eee; color: #ccc; margin-left: 10px;">Next &raquo;</span>
+        {% endif %}
+
+    </div>
+    {% endif %}
+    
+    
+    
+</body>
+</html>

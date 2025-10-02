@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ asset.serial_number }} Details - {{ SHOP_NAME }}</title>
+    <style>
+        .section { margin-bottom: 25px; border: 1px solid #eee; padding: 15px; }
+        .log-table th, .log-table td { padding: 8px; border-bottom: 1px solid #ddd; text-align: left; }
+    </style>
+</head>
+<body>
+
+    <header style="border-bottom: 1px solid #ccc; padding: 10px; margin-bottom: 20px;">
+        <img src="{{ SHOP_LOGO_URL }}" alt="{{ SHOP_NAME }} Logo" style="height: 50px; float: left; margin-right: 15px;">
+        <h1>Asset Detail: {{ asset.serial_number }}</h1>
+        <a href="{% url 'asset_list' %}" style="float: right; padding: 10px;">&larr; Back to Inventory</a>
+        <div style="clear: both;"></div>
+    </header>
+
+    <div class="section">
+        <h2>Core Information (Status: {{ asset.get_status_display }})</h2>
+        <p><strong>Asset ID:</strong> {{ asset.pk }}</p>
+        <p><strong>Type:</strong> {{ asset.asset_type.name }}</p>
+        <p><strong>Model:</strong> {{ asset.model_number }}</p>
+        <p><strong>Location:</strong> {{ asset.location }}</p>
+        <p><strong>Purchase Date:</strong> {{ asset.purchase_date }}</p>
+        <p><strong>Purchase Price (Cost Basis):</strong> ${{ asset.purchase_price|floatformat:2 }}</p>
+        <p><strong>Warranty End Date:</strong> {{ asset.warranty_end_date|default:"N/A" }}</p>
+    </div>
+
+    <div class="section" style="background-color: {% if asset.status == 'SOLD' %}#d4edda{% else %}#f8d7da{% endif %};">
+        <h2>Sale & Profit Tracking</h2>
+        
+        {% if is_retired %}
+            {% if sale_record %}
+                <p style="color: darkgreen;">Asset was **{{ asset.get_status_display }}** on {{ sale_record.retirement_date }}</p>
+                <p><strong>Sale Price:</strong> ${{ sale_record.sale_price|floatformat:2 }}</p>
+                <p><strong>Cost Basis:</strong> ${{ sale_record.cost_basis|floatformat:2 }}</p>
+                <h3 style="color: {% if sale_record.profit_loss >= 0 %}green{% else %}red{% endif %};">
+                    Profit/Loss: ${{ sale_record.profit_loss|floatformat:2 }}
+                </h3>
+                <button disabled>Print Receipt (Future)</button>
+            {% else %}
+                <p>Asset Status: **{{ asset.get_status_display }}** (No sale record found).</p>
+            {% endif %}
+
+        {% elif show_sale_form %}
+            <form method="post" action="{% url 'update_asset_status' asset_pk=asset.pk %}">
+    {% csrf_token %}
+    <p><strong>Current Status:</strong> {{ asset.get_status_display }}</p>
+    
+    {% elif asset.status == 'PENDING_SALE' %}
+    <p style="font-size: 1.1em; color: green;">
+        Sale Price saved ({{ asset.pending_sale_price|floatformat:2 }}). Click below to finalize...
+    </p>
+    <input type="hidden" name="new_status" value="SOLD">
+    <button type="submit" style="background-color: darkgreen; color: white;">FINALISE SALE</button>
+    {% endif %}
+</form>
+
+<form id="scrapsubmit" method="post" action="{% url 'update_asset_status' asset_pk=asset.pk %}" style="display:none;">
+    {% csrf_token %}
+    <input type="hidden" name="new_status" value="SCRAPPED">
+</form>
+    </div>
+
+    <div class="section">
+        <h2>Maintenance and Service History ({{ maintenance_logs|length }} Logs)</h2>
+        {% if maintenance_logs %}
+            <table class="log-table" style="width: 100%;">
+                <thead>
+                    <tr><th>Date</th><th>Type</th><th>Cost</th><th>Description</th></tr>
+                </thead>
+                <tbody>
+                    {% for log in maintenance_logs %}
+                    <tr>
+                        <td>{{ log.log_date }}</td>
+                        <td>{{ log.log_type }}</td>
+                        <td>${{ log.cost|floatformat:2 }}</td>
+                        <td>{{ log.description }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No maintenance history recorded for this asset.</p>
+        {% endif %}
+        
+        <button onclick="document.getElementById('logForm').style.display='block'" 
+                style="margin-top: 15px; background-color: #5cb85c; color: white;">
+            + Add New Maintenance Log
+        </button>
+
+        <div id="logForm" style="display:none; border: 1px solid #ddd; padding: 15px; margin-top: 10px;">
+            <h4>Record New Service/Repair</h4>
+            <form method="post" action="{% url 'add_maintenance_log' asset_pk=asset.pk %}">
+                {% csrf_token %}
+                <label for="log_date">Date Performed:</label>
+                <input type="date" id="log_date" name="log_date" required style="width: 100%; margin-bottom: 10px;"><br>
+
+                <label for="log_type">Type:</label>
+                <select id="log_type" name="log_type" required style="width: 100%; margin-bottom: 10px;">
+                    <option value="REPAIR">Repair</option>
+                    <option value="UPGRADE">Upgrade</option>
+                    <option value="SERVICE">Routine Service</option>
+                    <option value="AUDIT">Audit/Inspection</option>
+                </select><br>
+
+                <label for="cost">Cost ($):</label>
+                <input type="number" id="cost" name="cost" step="0.01" value="0.00" style="width: 100%; margin-bottom: 10px;"><br>
+
+                <label for="description">Description:</label>
+                <textarea id="description" name="description" required style="width: 100%; margin-bottom: 10px;"></textarea><br>
+
+                <button type="submit" style="background-color: #5cb85c; color: white;">Save Log</button>
+                <button type="button" onclick="document.getElementById('logForm').style.display='none'" style="background-color: #ccc;">Cancel</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

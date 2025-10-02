@@ -1,0 +1,105 @@
+{% load cart_filters %} 
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Mixed-Item Sale Builder</title>
+    <style>
+        /* Basic Styling for readability */
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { border-bottom: 2px solid #ccc; padding-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+        .button-link { 
+            display: inline-block; 
+            padding: 8px 15px; 
+            margin-right: 10px;
+            background-color: purple; 
+            color: white; 
+            text-decoration: none; 
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    {% if messages %}
+    <ul class="messages">
+        {% for message in messages %}
+        <li class="{{ message.tags }}" 
+            style="background-color: {% if 'success' in message.tags %}#d4edda{% else %}#f8d7da{% endif %}; 
+                   padding: 10px; border: 1px solid #c3e6cb; margin-bottom: 10px;">
+            {{ message }}
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    <h1>Mixed-Item Sale Builder</h1>
+    
+    <p>Select multiple items of any type to include in one transaction.</p>
+    
+    <div style="margin-bottom: 20px;">
+        <a href="{% url 'asset_list' %}" style="text-decoration: none;">&larr; Back to Inventory</a>
+    </div>
+
+    <h3 style="margin-top: 25px;">Assets Available to Sell ({{ available_assets|length }} Total)</h3>
+
+    {% if available_assets %}
+        <table border="1">
+            <thead>
+                <tr>
+                    <th>Select</th> 
+                    <th>Asset ID</th>
+                    <th>Asset Type</th>
+                    <th>Model / S/N</th>
+                    <th>Status</th>
+                    <th>Purchase Price</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for asset in available_assets %}
+                <tr>
+                    {% for asset in available_assets %}
+<tr>
+    <td style="text-align: center; width: 100px;">
+        
+        *****TEST HERE***
+        
+    </td>
+    </tr>
+{% endfor %}
+                    <td>{{ asset.pk }}</td>
+                    <td>{{ asset.asset_type.name }}</td>
+                    <td>{{ asset.model_number }} / {{ asset.serial_number }}</td>
+                    <td>{{ asset.get_status_display }}</td>
+                    <td>${{ asset.purchase_price|floatformat:2 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No assets are currently available to sell.</p>
+    {% endif %}
+
+    <div style="margin-top: 30px; padding: 15px; border: 1px solid #ccc; background-color: #f9f9f9;">
+        {% with cart_count=request.session.mixed_sale_cart|length|default:0 %}
+        <p style="font-size: 1.2em; font-weight: bold;">Items in Cart: {{ cart_count }}</p>
+
+        {% if cart_count > 0 %}
+            <a href="{% url 'finalize_mixed_sale' %}" class="button-link" style="background-color: darkgreen;">
+                Continue to Finalize Sale ({{ cart_count }} Items)
+            </a>
+        {% else %}
+            <button disabled style="background-color: #aaa; color: #fff; padding: 8px 15px; border: none; border-radius: 5px;">
+                Continue to Finalize Sale (Cart Empty)
+            </button>
+        {% endif %}
+        {% endwith %}
+    </div>
+
+</body>
+</html>

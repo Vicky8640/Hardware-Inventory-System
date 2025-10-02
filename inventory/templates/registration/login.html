@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login | {{ SHOP_NAME }}</title>
+</head>
+<body>
+    <div style="width: 300px; margin: 50px auto; padding: 20px; border: 1px solid #ccc;">
+        <h2>Login to {{ SHOP_NAME }} HMS</h2>
+        
+        {% if form.errors %}
+            <p style="color: red;">Your username and password didn't match. Please try again.</p>
+        {% endif %}
+        
+        <form method="post">
+            {% csrf_token %}
+            
+            <label for="id_username">Username:</label>
+            {{ form.username }}<br><br>
+            
+            <label for="id_password">Password:</label>
+            {{ form.password }}<br><br>
+
+            <input type="hidden" name="next" value="{{ next }}">
+            
+            <button type="submit" style="padding: 10px; background-color: darkblue; color: white; width: 100%;">Log In</button>
+        </form>
+    </div>
+</body>
+</html>

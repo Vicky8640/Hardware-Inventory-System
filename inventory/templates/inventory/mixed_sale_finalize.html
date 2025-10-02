@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Finalize Mixed Sale - {{ SHOP_NAME }}</title>
+</head>
+<body>
+    {% load static %}
+    {% load cart_filters %} 
+  {% include "inventory/messages_partial.html" %}
+
+    <header style="border-bottom: 1px solid #ccc; padding: 10px; margin-bottom: 20px;">
+        <img src="{{ SHOP_LOGO_URL }}" alt="{{ SHOP_NAME }} Logo" style="height: 50px; float: left; margin-right: 15px;">
+        <h1>{{ SHOP_NAME }} | Finalize Mixed Sale ({{ num_items }} Items)</h1>
+        <div style="clear: both;"></div>
+    </header>
+
+    <p>
+        <a href="{% url 'start_mixed_sale' %}">← Amend Cart / Go Back to Selection</a>
+    </p>
+    
+    <p style="border: 1px solid #0056b3; background-color: #e6f2ff; padding: 10px; font-weight: bold;">
+        Total Cost Basis for all items: ${{ total_cost_basis|floatformat:2 }}
+    </p>
+
+    <form method="post" action="{% url 'finalize_mixed_sale' %}" style="border: 2px solid #ccc; padding: 20px; margin-top: 20px;">
+        {% csrf_token %}
+
+        <h2>1. Set Individual Sale Prices</h2>
+        <table border="1" style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+            <thead>
+                <tr style="background-color: #f2f2f2;">
+                    <th>Asset Type</th>
+                    <th>Model / S/N</th>
+                    <th>Cost Basis</th>
+                    <th>Sale Price (Required)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for asset in assets %}
+                <tr>
+                    <td>{{ asset.asset_type.name }}</td>
+                    <td>{{ asset.model_number }} / {{ asset.serial_number }}</td>
+                    <td>${{ asset.purchase_price|floatformat:2 }}</td>
+                    <td>
+                        <input type="number" 
+                               name="sale_price_{{ asset.pk }}" 
+                               step="0.01" 
+                               min="0" 
+                               required 
+                               style="width: 100px; text-align: right;"
+                               value="{{ sale_data|get_item:asset.pk }}"
+                        >
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <h2>2. Apply Total Discount</h2>
+        <p>If you offer a total discount on the final invoice, enter the dollar amount here. It will be split proportionally across the assets.</p>
+        <label for="total_discount">Total Discount Amount ($):</label>
+        <input type="number" id="total_discount" name="total_discount" step="0.01" min="0" value="0.00" style="width: 100px;">
+        <br><br>
+
+        <button type="submit" style="padding: 15px 30px; background-color: darkgreen; color: white; font-size: 1.2em; cursor: pointer;">
+            Confirm & Finalize All Sales
+        </button>
+    </form>
+    
+
+</body>
+</html>
