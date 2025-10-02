@@ -1,73 +1,130 @@
+{% load static %}
+{% load cart_filters %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Finalize Mixed Sale - {{ SHOP_NAME }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select Assets for Mixed Sale - {{ SHOP_NAME }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" 
+          rel="stylesheet" 
+          integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" 
+          crossorigin="anonymous">
+    <style>
+        .header-logo { max-height: 40px; margin-right: 15px; }
+    </style>
 </head>
 <body>
-    {% load static %}
-    {% load cart_filters %} 
-  {% include "inventory/messages_partial.html" %}
+<div class="container-fluid mt-4">
 
-    <header style="border-bottom: 1px solid #ccc; padding: 10px; margin-bottom: 20px;">
-        <img src="{{ SHOP_LOGO_URL }}" alt="{{ SHOP_NAME }} Logo" style="height: 50px; float: left; margin-right: 15px;">
-        <h1>{{ SHOP_NAME }} | Finalize Mixed Sale ({{ num_items }} Items)</h1>
-        <div style="clear: both;"></div>
+    {% if messages %}
+        {# Assuming you have an _messages.html partial for Bootstrap alerts #}
+        {% include "inventory/_messages.html" %} 
+    {% endif %}
+
+    <header class="d-flex align-items-center mb-4 border-bottom pb-3">
+        {% if SHOP_LOGO_URL %}
+            <img src="{% static 'Company_Logos/Crane-Nuclear-Valve-Institute-1.png' %}" alt="Logo" class="header-logo">
+        {% endif %}
+        <h1 class="h3 mb-0">{{ SHOP_NAME }} | Start Mixed Sale (Step 1 of 2)</h1> 
     </header>
-
-    <p>
-        <a href="{% url 'start_mixed_sale' %}">← Amend Cart / Go Back to Selection</a>
-    </p>
     
-    <p style="border: 1px solid #0056b3; background-color: #e6f2ff; padding: 10px; font-weight: bold;">
-        Total Cost Basis for all items: ${{ total_cost_basis|floatformat:2 }}
-    </p>
+<body>
+    <div class="container mt-5">
+        {% if messages %}
+            {% include "inventory/_messages.html" %}
+        {% endif %}
 
-    <form method="post" action="{% url 'finalize_mixed_sale' %}" style="border: 2px solid #ccc; padding: 20px; margin-top: 20px;">
-        {% csrf_token %}
+        <form method="post" action="{% url 'finalize_mixed_sale' %}">
+            {% csrf_token %}
 
-        <h2>1. Set Individual Sale Prices</h2>
-        <table border="1" style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
-            <thead>
-                <tr style="background-color: #f2f2f2;">
-                    <th>Asset Type</th>
-                    <th>Model / S/N</th>
-                    <th>Cost Basis</th>
-                    <th>Sale Price (Required)</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for asset in assets %}
-                <tr>
-                    <td>{{ asset.asset_type.name }}</td>
-                    <td>{{ asset.model_number }} / {{ asset.serial_number }}</td>
-                    <td>${{ asset.purchase_price|floatformat:2 }}</td>
-                    <td>
+            {% if assets %}
+                <div class="table-responsive">
+                    <table class="table table-striped table-bordered table-sm">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Asset ID</th>
+                                <th>Type / Model / S/N</th>
+                                <th>Purchase Price (Cost Basis)</th>
+                                <th style="width: 150px;">Sale Price (Required)</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for asset in assets %}
+                            <tr>
+                                <td>{{ asset.pk }}</td> 
+                                <td>
+                                    {{ asset.asset_type.name }} / {{ asset.model_number }} / **{{ asset.serial_number|default:asset.auto_serial_number }}**
+                                </td>
+                                <td><span class="text-danger fw-bold">${{ asset.purchase_price|floatformat:2 }}</span></td>
+                                <td>
+                                    {% with price=sale_data|get_item_sale_price:asset.pk %}
+                                    <input type="number" 
+                                        name="sale_price_{{ asset.pk }}" 
+                                        id="sale_price_{{ asset.pk }}"
+                                        step="0.01" 
+                                        min="0.01" 
+                                        required 
+                                        class="form-control form-control-sm"
+                                        value="{{ price|default:asset.purchase_price|floatformat:2 }}"
+                                    >
+                                    {% endwith %}
+                                </td>
+                                <td>
+                                    <a href="{% url 'remove_from_mixed_sale' asset_pk=asset.pk %}" class="btn btn-sm btn-outline-danger">Remove</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="summary-box">
+                    <h2 class="h4 mb-3">Transaction Summary</h2>
+                    
+                    <div class="d-flex justify-content-between mb-2">
+                        <strong>Total Cost Basis:</strong> 
+                        <span>${{ total_cost_basis|floatformat:2 }}</span>
+                    </div>
+                    
+                    <div class="mb-3 border-top pt-3">
+                        <label for="total_discount" class="form-label">
+                            <strong>Total Sale Discount ($):</strong> 
+                        </label>
                         <input type="number" 
-                               name="sale_price_{{ asset.pk }}" 
-                               step="0.01" 
-                               min="0" 
-                               required 
-                               style="width: 100px; text-align: right;"
-                               value="{{ sale_data|get_item:asset.pk }}"
+                            name="total_discount" 
+                            id="total_discount"
+                            step="0.01" 
+                            min="0.00" 
+                            class="form-control"
+                            value="{{ sale_data.total_discount|default:'0.00' }}" 
+                            style="width: 150px;"
                         >
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        
-        <h2>2. Apply Total Discount</h2>
-        <p>If you offer a total discount on the final invoice, enter the dollar amount here. It will be split proportionally across the assets.</p>
-        <label for="total_discount">Total Discount Amount ($):</label>
-        <input type="number" id="total_discount" name="total_discount" step="0.01" min="0" value="0.00" style="width: 100px;">
-        <br><br>
+                        <p class="text-muted small mt-1">
+                            *This discount will be proportionally applied across all items based on their set sale price during processing.
+                        </p>
+                    </div>
+                    
+                    <div class="mt-4 pt-3 border-top">
+                        <button type="submit" class="btn btn-success me-2">
+                            CONFIRM SALE & RETIRE {{ num_items }} ASSETS
+                        </button>
+                        
+                        <a href="{% url 'start_mixed_sale' %}" class="btn btn-outline-secondary">
+                            Add More Assets
+                        </a>
+                    </div>
+                </div>
 
-        <button type="submit" style="padding: 15px 30px; background-color: darkgreen; color: white; font-size: 1.2em; cursor: pointer;">
-            Confirm & Finalize All Sales
-        </button>
-    </form>
-    
-
+            {% else %}
+                <div class="alert alert-warning" role="alert">
+                    Your mixed sale cart is empty.
+                </div>
+                <a href="{% url 'start_mixed_sale' %}" class="btn btn-primary">Start Asset Selection</a>
+            {% endif %}
+        </form>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
 </body>
 </html>

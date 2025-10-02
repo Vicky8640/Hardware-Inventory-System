@@ -1,109 +1,129 @@
+{% load static %}
+{% load cart_filters %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Mixed-Item Sale Builder - {{ SHOP_NAME }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select Assets for Mixed Sale - {{ SHOP_NAME }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" 
+          rel="stylesheet" 
+          integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" 
+          crossorigin="anonymous">
     <style>
-        /* General Pagination Styling */
-        .pagination {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            margin-top: 25px;
-            font-size: 1.1em;
-        }
-
-        /* Styling for the pagination buttons/spans */
-        .pagination a, .pagination span {
-            border: 1px solid #ccc;
-            padding: 8px 15px;
-            margin: 0 5px;
-            text-decoration: none;
-            color: #007bff; /* Blue for links */
-            border-radius: 4px;
-            background-color: #fff;
-            transition: background-color 0.2s, border-color 0.2s;
-            cursor: pointer;
-        }
-
-        /* Styling for the current page indicator (Page X of Y) */
-        .pagination .current {
-            background-color: #ADD8E6; /* Light blue, similar to your screenshot */
-            border-color: #007bff; /* Blue border */
-            color: #000;
-            font-weight: bold;
-            pointer-events: none; /* Disable click on the current page indicator */
-        }
-        
-        /* Hover effect for clickable links */
-        .pagination a:hover {
-            background-color: #f0f0f0;
-            border-color: #999;
-        }
+        .header-logo { max-height: 40px; margin-right: 15px; }
     </style>
 </head>
 <body>
-    {% load static %}
-    {% include "inventory/messages_partial.html" %}
+<div class="container-fluid mt-4">
 
-    <header style="border-bottom: 1px solid #ccc; padding: 10px; margin-bottom: 20px;">
-        <img src="{{ SHOP_LOGO_URL }}" alt="{{ SHOP_NAME }} Logo" style="height: 50px; float: left; margin-right: 15px;">
-        <h1>{{ SHOP_NAME }} | Mixed-Item Sale Builder</h1>
-        <div style="clear: both;"></div>
+    {% if messages %}
+        {# Assuming you have an _messages.html partial for Bootstrap alerts #}
+        {% include "inventory/_messages.html" %} 
+    {% endif %}
+
+    <header class="d-flex align-items-center mb-4 border-bottom pb-3">
+        {% if SHOP_LOGO_URL %}
+            <img src="{% static 'Company_Logos/Crane-Nuclear-Valve-Institute-1.png' %}" alt="Logo" class="header-logo">
+        {% endif %}
+        <h1 class="h3 mb-0">{{ SHOP_NAME }} | Start Mixed Sale (Step 1 of 2)</h1> 
     </header>
+    
+    <p class="mb-4">Select the assets you want to add to the sale cart. Total available items: **{{ assets.paginator.count }}**</p>
 
-    <p><a href="{% url 'asset_list' %}">← Back to Inventory</a></p>
+    <form method="post" action="{% url 'start_mixed_sale' %}?page={{ assets.number }}{{ request|current_query }}" class="mb-4">
+        {% csrf_token %}
 
-        <h2>Assets Available to Sell ({{ num_items }} Total)</h2>
+        <div class="d-flex mb-3 gap-2">
+            <button type="submit" class="btn btn-primary">
+                Add Selected to Cart & Continue Selection
+            </button>
+            <a href="{% url 'finalize_mixed_sale' %}" class="btn btn-success">
+                View & Finalize Cart (<span class="badge text-bg-light">{{ request.session.mixed_sale_assets|length|default:0 }}</span> items)
+            </a>
+            <a href="{% url 'asset_list' %}" class="btn btn-secondary">
+                Cancel & Return to Inventory
+            </a>
+        </div>
 
-    <form method="post" action="{% url 'start_mixed_sale' %}">
-        {% csrf_token %}
-        <table border="1" style="width: 100%; border-collapse: collapse;">
-            <thead>
-                <tr style="background-color: #f2f2f2;">
-                    <th>Select</th>
-                    <th>Asset Type</th>
-                    <th>Model / S/N</th>
-                    <th>Status</th>
-                    <th>Purchase Price</th>
-                </tr>
-            </thead>
-            <tbody>
-                                {% for asset in assets %} 
-                    <tr>
-                        <td>
-                            <input type="checkbox" name="selected_assets" value="{{ asset.pk }}">
-                        </td>
-                        <td>{{ asset.asset_type.name }}</td>
-                        <td>{{ asset.asset_type.model_number }} / {{ asset.serial_number }}</td>
-                        <td>{{ asset.status }}</td>
-                        <td>${{ asset.purchase_price|floatformat:2 }}</td>
-                    </tr>
-                {% empty %}
-                    <tr>
-                        <td colspan="5">No assets available for sale.</td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        
-        <div class="pagination">
-    {% if assets.has_previous %}
-        <a href="?page={{ assets.previous_page_number }}">« Previous</a> 
-    {% endif %}
+        {% if assets %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-bordered">
+                    <thead class="table-dark">
+                        <tr>
+                            <th><input type="checkbox" id="select-all" onclick="toggleAll(this)" class="form-check-input"></th>
+                            <th>Asset ID</th>
+                            <th>Type</th>
+                            <th>Model/S/N</th>
+                            <th>Purchase Price</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for asset in assets %}
+                        <tr>
+                            <td>
+                                <input type="checkbox" name="selected_assets" value="{{ asset.pk }}" class="form-check-input"
+                                {% if asset.pk|stringformat:"s" in request.session.mixed_sale_assets %}
+                                    checked disabled title="Already in cart"
+                                {% endif %}>
+                            </td>
+                            <td>{{ asset.pk }}</td> 
+                            <td>{{ asset.asset_type.name }}</td>
+                            <td>{{ asset.model_number }} ({{ asset.serial_number|default:asset.auto_serial_number }})</td>
+                            <td><span class="text-danger">${{ asset.purchase_price|floatformat:2 }}</span></td>
+                            <td><span class="badge text-bg-info">{{ asset.get_status_display }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
 
-    <span class="current">
-        Page {{ assets.number }} of {{ assets.paginator.num_pages }}
-    </span>
+            {% if assets.has_other_pages %}
+                <nav aria-label="Page navigation" class="d-flex justify-content-center mt-3">
+                    <ul class="pagination">
+                        {# First/Previous Buttons #}
+                        {% if assets.has_previous %}
+                            <li class="page-item"><a class="page-link" href="?page=1{{ request|current_query }}">First</a></li>
+                            <li class="page-item"><a class="page-link" href="?page={{ assets.previous_page_number }}{{ request|current_query }}">Previous</a></li>
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">Previous</span></li>
+                        {% endif %}
 
-    {% if assets.has_next %}
-        <a href="?page={{ assets.next_page_number }}">Next »</a>
-    {% endif %}
+                        {# Current Page Info #}
+                        <li class="page-item active" aria-current="page">
+                            <span class="page-link">Page {{ assets.number }} of {{ assets.paginator.num_pages }}</span>
+                        </li>
+                        
+                        {# Next/Last Buttons #}
+                        {% if assets.has_next %}
+                            <li class="page-item"><a class="page-link" href="?page={{ assets.next_page_number }}{{ request|current_query }}">Next</a></li>
+                            <li class="page-item"><a class="page-link" href="?page={{ assets.paginator.num_pages }}{{ request|current_query }}">Last</a></li>
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">Next</span></li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            {% endif %}
+            
+        {% else %}
+            <div class="alert alert-info">No available assets found to add to a sale cart.</div>
+        {% endif %}
+    </form>
 </div>
-                
-        <button type="submit" style="padding: 10px 20px; margin-top: 20px; background-color: purple; color: white; font-size: 1.1em;">
-            Proceed to Checkout (Finalize Sale)
-        </button>
-    </form>
+
+<script>
+    // Simple JavaScript to handle Select All checkbox
+    function toggleAll(source) {
+        // Only select checkboxes that are NOT disabled (i.e., not already in the cart)
+        checkboxes = document.getElementsByName('selected_assets');
+        for(var i=0, n=checkboxes.length; i<n; i++) {
+            if (!checkboxes[i].disabled) {
+                checkboxes[i].checked = source.checked;
+            }
+        }
+    }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
 </body>
 </html>

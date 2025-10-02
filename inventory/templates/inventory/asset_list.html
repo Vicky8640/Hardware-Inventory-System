@@ -1,77 +1,90 @@
-{% load mathfilters %} 
-{% load cart_filters %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Asset Inventory - {{ SHOP_NAME }}</title>
-</head>
-<body>
-    {% if messages %}
-<ul class="messages" style="list-style-type: none; padding: 0;">
-    {% for message in messages %}
-    <li{% if message.tags %} class="{{ message.tags }}"{% endif %} style="padding: 10px; margin-bottom: 10px; border-radius: 5px; 
-        {% if 'success' in message.tags %}background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;
-        {% elif 'error' in message.tags %}background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;
-        {% elif 'warning' in message.tags %}background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba;
-        {% endif %}">
-        {{ message }}
-    </li>
-    {% endfor %}
-</ul>
-{% endif %}
+{% extends "base.html" %}  
+{% load static %}
+{% load cart_filters %} 
 
-    <header style="border-bottom: 1px solid #ccc; padding: 10px; margin-bottom: 20px;">
-        <img src="{{ SHOP_LOGO_URL }}" alt="{{ SHOP_NAME }} Logo" style="height: 50px; float: left; margin-right: 15px;">
-        <h1>{{ SHOP_NAME }} | Inventory List</h1>
-        <div style="clear: both;"></div>
-    </header>
-    <div style="margin-bottom: 20px;">
-        <a href="{% url 'add_asset' %}" style="padding: 8px 15px; background-color: blue; color: white; text-decoration: none;">+ Add New Asset</a>
-        
-        <a href="{% url 'bulk_sale' %}" style="padding: 8px 15px; background-color: darkgreen; color: white; text-decoration: none; margin-left: 10px;">Quick Bulk Sale (Same Type)</a>
-        
-        <a href="{% url 'start_mixed_sale' %}" style="padding: 8px 15px; background-color: purple; color: white; text-decoration: none; margin-left: 10px;">Start Mixed Sale (Multi-Item Cart)</a>
+{% block custom_styles %}
+<style>
+    .filter-section { background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+    /* Style for Profit/Loss column (These should ideally be in base.html if used widely) */
+    .profit-positive { color: #198754; font-weight: bold; } 
+    .profit-negative { color: #dc3545; font-weight: bold; }
+</style>
+{% endblock custom_styles %}
 
+{% block title %}Inventory List | {{ SHOP_NAME }}{% endblock %}
+
+{% block content %}
+
+    {% include "inventory/_messages.html" %}
+
+    <div class="row mb-3">
+        <div class="col-md-auto">
+            <a href="{% url 'add_asset' %}" class="btn btn-primary">
+                + Add New Asset
+            </a>
+        </div>
+        <div class="col-md-auto">
+            <a href="{% url 'bulk_sale' %}" class="btn btn-success">
+                Quick Bulk Sale (Same Type)
+            </a>
+        </div>
+        <div class="col-md-auto">
+            <a href="{% url 'start_mixed_sale' %}" class="btn btn-danger">
+                Start Mixed Sale (Multi-Item Cart) 
+                {% with cart_count=request.session.mixed_sale_assets|length|default:0 %}
+                    {% if cart_count > 0 %}
+                        <span class="badge text-bg-light">{{ cart_count }}</span>
+                    {% endif %}
+                {% endwith %}
+            </a>
+        </div>
     </div>
-    <form method="get" action="{% url 'asset_list' %}" style="margin-bottom: 20px; padding: 10px; border: 1px solid #eee;">
-        <label for="asset-type-filter" style="margin-right: 20px;">Filter by Type:</label>
-<select name="asset_type" id="asset-type-filter" onchange="this.form.submit()">
-    <option value="">-- All Types --</option>
     
-    {% for asset_type in ALL_ASSET_TYPES %}
-        <option value="{{ asset_type.pk }}" {% if current_asset_type|stringformat:"s" == asset_type.pk|stringformat:"s" %}selected{% endif %}>
-            {{ asset_type.name }}
-        </option>
-    {% endfor %}
-</select>
+    <div class="filter-section">
+    <form method="GET" action="{% url 'asset_list' %}" class="row g-3 align-items-end">
+        
+        <div class="col-md-4">
+            <label for="id_asset_type" class="form-label">Filter by Type</label>
+            <select id="id_asset_type" name="asset_type" class="form-select" onchange="this.form.submit()"> 
+                <option value="">-- All Types --</option>
+                {% for type in ALL_ASSET_TYPES %}
+                    <option value="{{ type.pk }}" {% if current_asset_type == type.pk|stringformat:"s" %}selected{% endif %}>
+                        {{ type.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="col-md-3">
+            <label for="id_status" class="form-label">Filter by Status</label>
+            <select id="id_status" name="status" class="form-select" onchange="this.form.submit()">
+                <option value="">-- All Statuses --</option>
+                {% for key, value in STATUS_CHOICES %}
+                    <option value="{{ key }}" {% if current_status == key %}selected{% endif %}>
+                        {{ value }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="col-md-3">
+            <label for="id_location" class="form-label">Filter by Location</label>
+            <select id="id_location" name="location" class="form-select" onchange="this.form.submit()">
+                <option value="">-- All Locations --</option>
+                {% for key, value in LOCATIONS %}
+                    <option value="{{ key }}" {% if current_location == key %}selected{% endif %}>
+                        {{ value }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        </form>
+</div>
 
-<label for="status" style="margin-left: 20px;">Filter by Status:</label>
-<select name="status" id="status" onchange="this.form.submit()">
-    <option value="">-- All Statuses --</option>
-    {% for status_code, status_name in STATUS_CHOICES %}
-        <option value="{{ status_code }}" 
-            {% if current_status == status_code %}selected{% endif %}>
-            {{ status_name }}
-        </option>
-    {% endfor %}
-</select>
-
-<label for="location" style="margin-left: 20px;">Filter by Location:</label>
-<select name="location" id="location" onchange="this.form.submit()">
-    <option value="">-- All Locations --</option>
-    {% for location_code, location_name in LOCATIONS %}
-        <option value="{{ location_code }}" 
-            {% if current_location == location_code %}selected{% endif %}>
-            {{ location_name }}
-        </option>
-    {% endfor %}
-</select>
-    </form>
-
-    {% if assets %}
-        <table border="1" style="width: 100%; border-collapse: collapse;">
-            <thead>
+    <div class="table-responsive">
+        <table class="table table-striped table-hover table-bordered">
+            <thead class="table-dark">
                 <tr>
                     <th>Asset ID</th>
                     <th>Type</th>
@@ -79,98 +92,81 @@
                     <th>Serial Number</th>
                     <th>Location</th>
                     <th>Status</th>
-                    <th>Purchase Price</th> 
+                    <th>Purchase Price</th>
                     <th>Sale Price</th>
                     <th>Profit/Loss</th>
-                    <th>Details</th> 
+                    <th>Action</th> 
+                    <th>Details</th>
                 </tr>
             </thead>
             <tbody>
                 {% for asset in assets %}
-                {% with sale_record=asset.sale_record %}
-                <tr style="background-color: 
-                    {% if asset.status == 'SOLD' %}#d4edda;
-                    {% elif asset.status == 'SCRAPPED' %}#f8d7da;
-                    {% elif asset.status == 'PENDING_SALE' %}#fff3cd;
-                    {% else %}white;
-                    {% endif %}
-                ">
-                    <td>{{ asset.pk }}</td> 
-                    
+                <tr>
+                    <td>{{ asset.pk }}</td>
                     <td>{{ asset.asset_type.name }}</td>
-                    
                     <td>{{ asset.model_number }}</td>
-                    
                     <td>{{ asset.serial_number }}</td>
-                    
                     <td>{{ asset.get_location_display }}</td>
-                    
-                    <td>{{ asset.get_status_display }}</td>
-                    
+                    <td><span class="badge bg-{% if asset.status == 'IN_STOCK' %}info{% elif asset.status == 'PENDING_SALE' %}warning{% else %}success{% endif %}">{{ asset.get_status_display }}</span></td>
                     <td>${{ asset.purchase_price|floatformat:2 }}</td>
-
+                    
+                    {% if asset.status == 'SOLD' %}
+                        <td>${{ asset.sale_record.sale_price|floatformat:2 }}</td>
+                        {% with profit=asset.sale_record.profit_loss %}
+                        <td class="{% if profit >= 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                            ${{ profit|floatformat:2 }}
+                        </td>
+                        {% endwith %}
+                    {% else %}
+                        <td>N/A</td>
+                        <td>N/A</td>
+                    {% endif %}
+                    
                     <td>
-                        {% if sale_record %}
-                            ${{ sale_record.sale_price|floatformat:2 }}
-                        {% else %}
-                            N/A
-                        {% endif %}
-                    </td>
-
-                    <td style="color: 
-                        {% if sale_record and sale_record.profit_loss >= 0 %}green;
-                        {% elif sale_record and sale_record.profit_loss < 0 %}red;
-                        {% else %}gray;
-                        {% endif %}
-                    ">
-                        {% if sale_record %}
-                            {% if sale_record.profit_loss < 0 %}
-                                (${{ sale_record.profit_loss|abs|floatformat:2 }}) 
+                        {% if asset.status == 'IN_STOCK' %}
+                            {% if asset.pk|stringformat:"s" not in request.session.mixed_sale_assets %}
+                                <a href="{% url 'add_to_mixed_sale_from_list' asset_pk=asset.pk %}" class="btn btn-sm btn-success" title="Quick Add to Mixed Sale Cart">
+                                    + Add
+                                </a>
                             {% else %}
-                                ${{ sale_record.profit_loss|floatformat:2 }}
+                                <span class="text-success small">In Cart ✔️</span>
                             {% endif %}
                         {% else %}
                             N/A
                         {% endif %}
                     </td>
-
-                    <td>
-                        <a href="{% url 'asset_detail' pk=asset.pk %}">View Details</a>
-                    </td>
+                    <td><a href="{% url 'asset_detail' pk=asset.pk %}" class="btn btn-sm btn-outline-info">View Details</a></td>
                 </tr>
-                {% endwith %}
+                {% empty %}
+                <tr>
+                    <td colspan="11" class="text-center">No assets found matching the current filters.</td>
+                </tr>
                 {% endfor %}
             </tbody>
         </table>
-    {% else %}
-        <p>No assets found in the inventory with the current filters.</p>
-    {% endif %}
-
-    {% if assets.has_other_pages %}
-    <div class="pagination" style="margin-top: 20px; text-align: center;">
-        
-        {% if assets.has_previous %}
-            <a href="?page={{ assets.previous_page_number }}{% current_query %}" 
-               style="padding: 5px 10px; border: 1px solid #ccc; margin-right: 10px; text-decoration: none;">&laquo; Previous</a>
-        {% else %}
-            <span style="padding: 5px 10px; border: 1px solid #eee; color: #ccc; margin-right: 10px;">&laquo; Previous</span>
-        {% endif %}
-
-        <span class="current" style="padding: 5px 10px; border: 1px solid blue; background-color: lightblue;">
-            Page {{ assets.number }} of {{ assets.paginator.num_pages }}
-        </span>
-
-        {% if assets.has_next %}
-            <a href="?page={{ assets.next_page_number }}{% current_query %}" 
-               style="padding: 5px 10px; border: 1px solid #ccc; margin-left: 10px; text-decoration: none;">Next &raquo;</a>
-        {% else %}
-            <span style="padding: 5px 10px; border: 1px solid #eee; color: #ccc; margin-left: 10px;">Next &raquo;</span>
-        {% endif %}
-
     </div>
-    {% endif %}
-    
-    
-    
-</body>
-</html>
+
+     <nav aria-label="Page navigation" class="d-flex justify-content-center">
+        <ul class="pagination">
+            {% if assets.has_previous %}
+                <li class="page-item"><a class="page-link" href="?page=1{{ request|current_query }}">First</a></li>
+                <li class="page-item"><a class="page-link" href="?page={{ assets.previous_page_number }}{{ request|current_query }}">Previous</a></li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">First</span></li>
+                <li class="page-item disabled"><span class="page-link">Previous</span></li>
+            {% endif %}
+
+            <li class="page-item active" aria-current="page">
+                <span class="page-link">Page {{ assets.number }} of {{ assets.paginator.num_pages }}</span>
+            </li>
+            
+            {% if assets.has_next %}
+                <li class="page-item"><a class="page-link" href="?page={{ assets.next_page_number }}{{ request|current_query }}">Next</a></li>
+                <li class="page-item"><a class="page-link" href="?page={{ assets.paginator.num_pages }}{{ request|current_query }}">Last</a></li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">Next</span></li>
+                <li class="page-item disabled"><span class="page-link">Last</span></li>
+            {% endif %}
+        </ul>
+    </nav>
+{% endblock content %}

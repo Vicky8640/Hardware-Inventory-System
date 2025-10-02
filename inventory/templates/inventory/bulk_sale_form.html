@@ -1,48 +1,90 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Bulk Sale - {{ SHOP_NAME }}</title>
-</head>
-<body>
+{% extends "base.html" %}
+{% load static %}
+{% load widget_tweaks %} 
 
-    <header style="border-bottom: 1px solid #ccc; padding: 10px; margin-bottom: 20px;">
-        <img src="{{ SHOP_LOGO_URL }}" alt="{{ SHOP_NAME }} Logo" style="height: 50px; float: left; margin-right: 15px;">
-        <h1>Bulk Asset Sale</h1>
-        <a href="{% url 'asset_list' %}" style="float: right; padding: 10px;">&larr; Back to Inventory</a>
-        <div style="clear: both;"></div>
-    </header>
+{% block title %}Quick Bulk Sale | {{ SHOP_NAME }}{% endblock %}
 
-    {% if error %}
-        <p style="color: red; border: 1px solid red; padding: 10px;">Error: {{ error }}</p>
-    {% endif %}
+{% block header_title %}{{ SHOP_NAME }} | Quick Bulk Sale{% endblock %}
 
-    <p>Use this form to quickly sell multiple items of the same Asset Type and record the sale profit for each unit.</p>
+{% block content %}
+<div class="container mt-4 mb-5">
+    <a href="{% url 'asset_list' %}" class="btn btn-outline-secondary mb-4">
+        <i class="bi bi-arrow-left"></i> ← Back to Inventory List
+    </a>
+
+    <h2 class="mb-3">Quick Bulk Sale (Same Type)</h2>
     
-    <form method="post" action="{% url 'bulk_sale' %}" style="width: 400px; padding: 20px; border: 1px solid #ddd;">
-        {% csrf_token %}
+    {% include "inventory/_messages.html" %} 
 
-        <fieldset>
-            <legend>Sale Details</legend>
+    <div class="card shadow">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0">Bulk Sale Details</h5>
+        </div>
+        <div class="card-body">
+            
+            <form method="post" action="{% url 'bulk_sale' %}" id="bulkSaleForm">
+                {% csrf_token %} 
+                
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        {{ form.asset_type.label_tag }}
+                        {{ form.asset_type|add_class:"form-select" }}
+                        <div class="invalid-feedback">{{ form.asset_type.errors }}</div>
+                    </div>
 
-            <label for="asset_type">Asset Type to Sell:</label>
-            <select name="asset_type" id="asset_type" required style="width: 100%; margin-bottom: 15px;">
-                {% for type in asset_types %}
-                    <option value="{{ type.pk }}">{{ type.name }}</option>
-                {% endfor %}
-            </select><br>
+                    <div class="col-md-3">
+                        {{ form.quantity.label_tag }}
+                        {{ form.quantity|add_class:"form-control" }}
+                        <div class="invalid-feedback">{{ form.quantity.errors }}</div>
+                    </div>
 
-            <label for="quantity">Quantity Sold:</label>
-            <input type="number" id="quantity" name="quantity" min="1" required style="width: 100%; margin-bottom: 15px;"><br>
+                    <div class="col-md-3">
+                        {{ form.unit_sale_price.label_tag }}
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            {{ form.unit_sale_price|add_class:"form-control" }}
+                        </div>
+                        <div class="invalid-feedback">{{ form.unit_sale_price.errors }}</div>
+                    </div>
+                </div>
 
-            <label for="sale_price_per_unit">Sale Price per Unit ($):</label>
-            <input type="number" id="sale_price_per_unit" name="sale_price_per_unit" step="0.01" required style="width: 100%; margin-bottom: 20px;"><br>
+                <div class="alert alert-info mt-4 p-3 d-flex justify-content-between align-items-center">
+                    <strong class="fs-5">Total Sale Amount:</strong>
+                    <span class="fs-4 fw-bold text-success" id="totalSaleAmount">$0.00</span>
+                </div>
+                
+                <button type="submit" class="btn btn-success btn-lg mt-3 w-100 shadow-sm">
+                    <i class="bi bi-box-arrow-in-right me-2"></i> Confirm Sale and Mark Items as Sold
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
 
-        </fieldset>
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const quantityInput = document.getElementById('id_quantity');
+        const priceInput = document.getElementById('id_unit_sale_price');
+        const totalDisplay = document.getElementById('totalSaleAmount');
+
+        function calculateTotal() {
+            const quantity = parseInt(quantityInput.value) || 0;
+            // Use parseFloat to handle decimal input
+            const price = parseFloat(priceInput.value) || 0.00; 
+
+            // Calculate total and format for display
+            const total = (quantity * price);
+            totalDisplay.textContent = '$' + total.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+
+        // Attach event listeners to update the total on change
+        quantityInput.addEventListener('input', calculateTotal);
+        priceInput.addEventListener('input', calculateTotal);
         
-        <button type="submit" style="padding: 10px 20px; background-color: darkred; color: white; width: 100%;">
-            Finalize Bulk Sale
-        </button>
-    </form>
-</body>
-</html>
+        // Run once on load to show initial value
+        calculateTotal(); 
+    });
+</script>
+{% endblock extra_js %}
+{% endblock content %}

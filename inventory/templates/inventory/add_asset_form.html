@@ -1,70 +1,102 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Add New Assets - {{ SHOP_NAME }}</title>
-</head>
-<body>
+{% extends "base.html" %}
+{% load static %}
+{% load widget_tweaks %}
+{% load cart_filters %} 
 
-    <header style="border-bottom: 1px solid #ccc; padding: 10px; margin-bottom: 20px;">
-        <img src="{{ SHOP_LOGO_URL }}" alt="{{ SHOP_NAME }} Logo" style="height: 50px; float: left; margin-right: 15px;">
-        <h1>{{ SHOP_NAME }} | Inventory Input</h1>
-        <div style="clear: both;"></div>
-    </header>
+{% block title %}Add New Assets | {{ SHOP_NAME }}{% endblock %}
 
-    {% if error %}
-        <p style="color: red; border: 1px solid red; padding: 10px;">{{ error }}</p>
-    {% endif %}
+{% block header_title %}{{ SHOP_NAME }} | Inventory Input{% endblock %}
 
-    <form method="post" action="{% url 'add_asset' %}">
-        {% csrf_token %} <fieldset>
-            <legend>Core Asset Details (Shared)</legend>
+{% block content %}
+<div class="container mt-4 mb-5">
 
-            <label for="asset_type">Asset Type:</label>
-            <select name="asset_type" id="asset_type" required>
-                {% for type in asset_types %}
-                    <option value="{{ type.pk }}">{{ type.name }}</option>
-                {% endfor %}
-            </select><br><br>
+    <a href="{% url 'asset_list' %}" class="btn btn-outline-secondary mb-4">
+        <i class="bi bi-arrow-left"></i> ← Back to Inventory List
+    </a>
 
-            <label for="model_number">Model Number:</label>
-            <input type="text" id="model_number" name="model_number" required><br><br>
+    <h2 class="mb-3">Add New Asset(s)</h2>
 
-            <label for="purchase_price">Purchase Price ($):</label>
-            <input type="number" id="purchase_price" name="purchase_price" step="0.01" required><br><br>
+    {% include "inventory/_messages.html" %} 
 
-<label for="id_location">Location:</label>
-<select name="location" id="id_location" required>
-        {% for code, display in LOCATIONS %} 
-
-                        <option value="{{ code }}">{{ display }}</option>
-
-                    {% endfor %}
-
-            </select><br><br>
-
-            <label for="warranty_end_date">Warranty End Date (Optional):</label>
-            <input type="date" id="warranty_end_date" name="warranty_end_date"><br><br>
-        </fieldset>
-
-        <fieldset>
-            <legend>Quantity & Serial Numbers (Auto-Generated)</legend>
-
-            <label for="quantity">Quantity to Add:</label>
-            <input type="number" id="quantity" name="quantity" min="1" value="1" required><br><br>
-
-            <label for="serial_number">Serial Number (Optional):</label>
-            <input type="text" id="serial_number" name="serial_number" placeholder="Enter S/N if adding only ONE item" style="width: 100%;"><br>
+    <div class="card shadow">
+        <div class="card-header bg-light">
+            <h5 class="mb-0">Asset Creation Form</h5>
+        </div>
+        <div class="card-body">
             
-            <p style="font-size: 0.9em; color: gray; margin-top: 5px;">
-                *If **Quantity > 1**, all serial numbers will be **auto-generated** (e.g., LAP-000001). 
-                <br>*If **Quantity = 1**, leave blank to auto-generate, or enter a custom S/N.
-            </p>
-        </fieldset>
-        
-        <button type="submit" style="padding: 10px 20px; margin-top: 20px; background-color: darkgreen; color: white;">
-            Submit Assets (Create Record(s))
-        </button>
-    </form>
-</body>
-</html>
+            <form method="post" action="{% url 'add_asset' %}" class="needs-validation" novalidate>
+                {% csrf_token %} 
+                
+                <fieldset class="border p-3 mb-4 rounded">
+                    <legend class="float-none w-auto px-2 fs-6 fw-bold text-primary">Core Asset Details</legend>
+
+                    <div class="row g-3">
+                        
+                        <div class="col-md-4">
+                            {{ form.asset_type.label_tag }}
+                            {{ form.asset_type|add_class:"form-select" }}
+                            <div class="invalid-feedback">{{ form.asset_type.errors }}</div>
+                        </div>
+
+                        <div class="col-md-4">
+                            {{ form.location.label_tag }}
+                            {{ form.location|add_class:"form-select" }}
+                            <div class="invalid-feedback">{{ form.location.errors }}</div>
+                        </div>
+
+                        <div class="col-md-4">
+                            {{ form.model_number.label_tag }}
+                            {{ form.model_number|add_class:"form-control" }}
+                            <div class="invalid-feedback">{{ form.model_number.errors }}</div>
+                        </div>
+
+                        <div class="col-md-4">
+                            {{ form.purchase_price.label_tag }}
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                {{ form.purchase_price|add_class:"form-control" }}
+                            </div>
+                            <div class="invalid-feedback">{{ form.purchase_price.errors }}</div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            {{ form.warranty_end_date.label_tag }}
+                            {{ form.warranty_end_date|add_class:"form-control" }}
+                            <div class="form-text text-muted">Format: YYYY-MM-DD</div>
+                            <div class="invalid-feedback">{{ form.warranty_end_date.errors }}</div>
+                        </div>
+                    </div>
+                </fieldset>
+                
+                <fieldset class="border p-3 mb-4 rounded">
+                    <legend class="float-none w-auto px-2 fs-6 fw-bold text-info">Quantity & Serial Numbers</legend>
+
+                    <div class="row g-3 align-items-end">
+                        
+                        <div class="col-md-3">
+                            {{ form.quantity.label_tag }}
+                            {{ form.quantity|add_class:"form-control" }} 
+                            <div class="invalid-feedback">{{ form.quantity.errors }}</div>
+                        </div>
+
+                        <div class="col-md-9">
+                            <label for="id_serial_number" class="form-label">Serial Number (Optional)</label>
+                            <input type="text" id="id_serial_number" name="serial_number" class="form-control" placeholder="Enter S/N if adding ONLY ONE item">
+                        </div>
+                    </div>
+                    
+                    <p class="text-muted small mt-3 alert alert-light p-2">
+                        <i class="bi bi-lightbulb-fill me-1"></i> 
+                        **Quantity Management:** If **Quantity > 1**, all serial numbers will be **auto-generated**. If **Quantity = 1**, leave the S/N blank to auto-generate, or enter a custom S/N.
+                    </p>
+
+                </fieldset>
+                
+                <button type="submit" class="btn btn-success btn-lg mt-3 w-100 shadow-sm">
+                    <i class="bi bi-save-fill me-2"></i> Submit Assets (Create Record(s))
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock content %}

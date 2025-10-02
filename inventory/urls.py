@@ -29,11 +29,11 @@ urlpatterns = [
     # --- MIXED-ITEM SALE ---
     path('sale/mixed/start/', views.start_mixed_sale_view, name='start_mixed_sale'), 
     path('sale/mixed/finalize/', views.finalize_mixed_sale_view, name='finalize_mixed_sale'), 
-    
+    path('sale/mixed/remove/<int:asset_pk>/', views.remove_from_mixed_sale_view, name='remove_from_mixed_sale'), 
+
     # --- NEW CART MODIFICATION PATHS (Crucial for buttons) ---
     # Keep these unique names and definitions
     path('sale/mixed/add_one/<int:asset_pk>/', views.add_to_mixed_sale_from_list, name='add_to_mixed_sale_from_list'),
-    path('sale/mixed/remove/<int:asset_pk>/', views.remove_from_mixed_sale, name='remove_from_mixed_sale'),
     
     # ... any other UN-DUPLICATED paths ...
 ]
