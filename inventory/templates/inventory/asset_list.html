@@ -1,13 +1,39 @@
-{% extends "base.html" %}  
+{% extends "base.html" %} 
 {% load static %}
 {% load cart_filters %} 
+{% load crispy_forms_tags %} 
 
 {% block custom_styles %}
 <style>
-    .filter-section { background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
-    /* Style for Profit/Loss column (These should ideally be in base.html if used widely) */
-    .profit-positive { color: #198754; font-weight: bold; } 
-    .profit-negative { color: #dc3545; font-weight: bold; }
+    .filter-section { 
+        background-color: #f8f9fa; 
+        padding: 10px 15px; /* Tighter vertical spacing */
+        border-radius: 5px; 
+        margin-bottom: 5px; /* Tighter margin below the filter box */
+    }
+    
+    /* Style for Profit/Loss column */
+    .profit-positive { color: #198754; font-weight: bold; } 
+    .profit-negative { color: #dc3545; font-weight: bold; }
+    
+    /* 🛑 FIX for Space Issue: Prevents content from stretching vertically 🛑 */
+    .content-area {
+        display: flex;
+        flex-direction: column;
+        min-height: 0; /* Prevents stretching to fill viewport */
+    }
+    .table-responsive {
+        margin-bottom: 0; /* Ensure no extra margin below the table */
+    }
+    
+    /* Styling for the Floating Cart Widget */
+    .floating-cart-widget {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1050; 
+        transition: opacity 0.3s ease-in-out;
+    }
 </style>
 {% endblock custom_styles %}
 
@@ -15,158 +41,241 @@
 
 {% block content %}
 
-    {% include "inventory/_messages.html" %}
 
-    <div class="row mb-3">
-        <div class="col-md-auto">
-            <a href="{% url 'add_asset' %}" class="btn btn-primary">
-                + Add New Asset
-            </a>
-        </div>
-        <div class="col-md-auto">
-            <a href="{% url 'bulk_sale' %}" class="btn btn-success">
-                Quick Bulk Sale (Same Type)
-            </a>
-        </div>
-        <div class="col-md-auto">
-            <a href="{% url 'start_mixed_sale' %}" class="btn btn-danger">
-                Start Mixed Sale (Multi-Item Cart) 
-                {% with cart_count=request.session.mixed_sale_assets|length|default:0 %}
-                    {% if cart_count > 0 %}
-                        <span class="badge text-bg-light">{{ cart_count }}</span>
-                    {% endif %}
-                {% endwith %}
-            </a>
-        </div>
-    </div>
+    <div class="row mb-3">
+        <div class="col-md-auto">
+            <a href="{% url 'add_asset' %}" class="btn btn-primary">
+                <i class="bi bi-plus-circle me-1"></i> + Add New Asset
+            </a>
+        </div>
+        <div class="col-md-auto">
+            <a href="{% url 'bulk_sale' %}" class="btn btn-success">
+                <i class="bi bi-box-seam me-1"></i> Quick Bulk Sale (Same Type)
+            </a>
+        </div>
+    </div>
     
-    <div class="filter-section">
-    <form method="GET" action="{% url 'asset_list' %}" class="row g-3 align-items-end">
-        
-        <div class="col-md-4">
-            <label for="id_asset_type" class="form-label">Filter by Type</label>
-            <select id="id_asset_type" name="asset_type" class="form-select" onchange="this.form.submit()"> 
-                <option value="">-- All Types --</option>
-                {% for type in ALL_ASSET_TYPES %}
-                    <option value="{{ type.pk }}" {% if current_asset_type == type.pk|stringformat:"s" %}selected{% endif %}>
-                        {{ type.name }}
-                    </option>
-                {% endfor %}
-            </select>
-        </div>
-        
-        <div class="col-md-3">
-            <label for="id_status" class="form-label">Filter by Status</label>
-            <select id="id_status" name="status" class="form-select" onchange="this.form.submit()">
-                <option value="">-- All Statuses --</option>
-                {% for key, value in STATUS_CHOICES %}
-                    <option value="{{ key }}" {% if current_status == key %}selected{% endif %}>
-                        {{ value }}
-                    </option>
-                {% endfor %}
-            </select>
-        </div>
-        
-        <div class="col-md-3">
-            <label for="id_location" class="form-label">Filter by Location</label>
-            <select id="id_location" name="location" class="form-select" onchange="this.form.submit()">
-                <option value="">-- All Locations --</option>
-                {% for key, value in LOCATIONS %}
-                    <option value="{{ key }}" {% if current_location == key %}selected{% endif %}>
-                        {{ value }}
-                    </option>
-                {% endfor %}
-            </select>
-        </div>
-        
-        </form>
-</div>
+    <div class="content-area">
 
-    <div class="table-responsive">
-        <table class="table table-striped table-hover table-bordered">
-            <thead class="table-dark">
-                <tr>
-                    <th>Asset ID</th>
-                    <th>Type</th>
-                    <th>Model</th>
-                    <th>Serial Number</th>
-                    <th>Location</th>
-                    <th>Status</th>
-                    <th>Purchase Price</th>
-                    <th>Sale Price</th>
-                    <th>Profit/Loss</th>
-                    <th>Action</th> 
-                    <th>Details</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for asset in assets %}
-                <tr>
-                    <td>{{ asset.pk }}</td>
-                    <td>{{ asset.asset_type.name }}</td>
-                    <td>{{ asset.model_number }}</td>
-                    <td>{{ asset.serial_number }}</td>
-                    <td>{{ asset.get_location_display }}</td>
-                    <td><span class="badge bg-{% if asset.status == 'IN_STOCK' %}info{% elif asset.status == 'PENDING_SALE' %}warning{% else %}success{% endif %}">{{ asset.get_status_display }}</span></td>
-                    <td>${{ asset.purchase_price|floatformat:2 }}</td>
-                    
-                    {% if asset.status == 'SOLD' %}
-                        <td>${{ asset.sale_record.sale_price|floatformat:2 }}</td>
-                        {% with profit=asset.sale_record.profit_loss %}
-                        <td class="{% if profit >= 0 %}profit-positive{% else %}profit-negative{% endif %}">
-                            ${{ profit|floatformat:2 }}
-                        </td>
-                        {% endwith %}
-                    {% else %}
-                        <td>N/A</td>
-                        <td>N/A</td>
-                    {% endif %}
-                    
-                    <td>
-                        {% if asset.status == 'IN_STOCK' %}
-                            {% if asset.pk|stringformat:"s" not in request.session.mixed_sale_assets %}
-                                <a href="{% url 'add_to_mixed_sale_from_list' asset_pk=asset.pk %}" class="btn btn-sm btn-success" title="Quick Add to Mixed Sale Cart">
-                                    + Add
-                                </a>
-                            {% else %}
-                                <span class="text-success small">In Cart ✔️</span>
-                            {% endif %}
+        <div class="filter-section p-3 mb-2"> 
+            <form method="GET" action="{% url 'asset_list' %}" class="row g-2">
+                
+                <div class="col-md-3">
+                    <select id="id_asset_type" name="asset_type" class="form-select **form-select-sm**" onchange="this.form.submit()"> 
+                        <option value="">Filter by Type</option>
+                        {% for type in ALL_ASSET_TYPES %}
+                            <option value="{{ type.pk }}" {% if current_asset_type == type.pk|stringformat:"s" %}selected{% endif %}>
+                                {{ type.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-3">
+                    <select id="id_status" name="status" class="form-select **form-select-sm**" onchange="this.form.submit()">
+                        <option value="">Filter by Status</option>
+                        {% for key, value in STATUS_CHOICES %}
+                            <option value="{{ key }}" {% if current_status == key %}selected{% endif %}>
+                                {{ value }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-4">
+                    <select id="id_location" name="location" class="form-select **form-select-sm**" onchange="this.form.submit()">
+                        <option value="">Filter by Location</option>
+                        {% for key, value in LOCATIONS %}
+                            <option value="{{ key }}" {% if current_location == key %}selected{% endif %}>
+                                {{ value }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-2 d-grid"> 
+                    <a href="{% url 'asset_list' %}" class="btn btn-secondary **btn-sm**">Clear Filters</a>
+                </div>
+            </form>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-striped table-hover table-bordered">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Asset ID</th>
+                        <th>Type</th>
+                        <th>Model</th>
+                        <th>Serial Number</th>
+                        <th>Location</th>
+                        <th>Status</th>
+                        <th>Purchase Price</th>
+                        <th>Sale Price</th>
+                        <th>Profit/Loss</th>
+                        <th>Action</th> 
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for asset in assets %} 
+                    <tr>
+                        <td>{{ asset.pk }}</td>
+                        <td>{{ asset.asset_type.name }}</td>
+                        <td>{{ asset.model_number }}</td>
+                        <td>{{ asset.serial_number }}</td>
+                        <td>{{ asset.get_location_display }}</td>
+                        <td><span class="badge bg-{% if asset.status == 'IN_STOCK' %}info{% elif asset.status == 'PENDING_SALE' %}warning{% else %}success{% endif %}">{{ asset.get_status_display }}</span></td>
+                        <td>${{ asset.purchase_price|floatformat:2 }}</td>
+                        
+                        {% if asset.status == 'SOLD' %}
+                            <td>${{ asset.individual_sale_price|floatformat:2 }}</td> 
+    
+                            {% with profit=asset.profit_loss %} 
+                                <td class="{% if profit is not None and profit >= 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                                    {% if profit is not None %}${{ profit|floatformat:2 }}{% else %}N/A{% endif %}
+                                </td>
+                            {% endwith %}
                         {% else %}
-                            N/A
+                            <td>-</td> 
+                            <td>-</td> 
                         {% endif %}
-                    </td>
-                    <td><a href="{% url 'asset_detail' pk=asset.pk %}" class="btn btn-sm btn-outline-info">View Details</a></td>
-                </tr>
+                        
+                        <td>
+                            {% if asset.status == 'IN_STOCK' %}
+                                {% if asset.pk|stringformat:"s" not in request.session.mixed_sale_assets|default:'' %}
+                                    <button class="btn btn-sm btn-info add-to-cart-btn" 
+                                            data-asset-id="{{ asset.pk }}" 
+                                            data-url="{% url 'add_to_mixed_sale' %}"> 
+                                        Add to Cart
+                                    </button>
+                                {% else %}
+                                    <button class="btn btn-sm btn-success" disabled>In Cart ✔️</button>
+                                {% endif %} 
+                            {% else %}
+                                <button class="btn btn-sm btn-secondary" disabled>Unavailable</button>
+                            {% endif %} 
+                        </td>
+                        
+                        <td><a href="{% url 'asset_detail' asset_pk=asset.pk %}" class="btn btn-sm btn-outline-info">View Details</a></td>
+                    </tr>
                 {% empty %}
                 <tr>
                     <td colspan="11" class="text-center">No assets found matching the current filters.</td>
                 </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+                {% endfor %} 
+                </tbody> 
+            </table>
+        </div>
 
-     <nav aria-label="Page navigation" class="d-flex justify-content-center">
-        <ul class="pagination">
-            {% if assets.has_previous %}
-                <li class="page-item"><a class="page-link" href="?page=1{{ request|current_query }}">First</a></li>
-                <li class="page-item"><a class="page-link" href="?page={{ assets.previous_page_number }}{{ request|current_query }}">Previous</a></li>
-            {% else %}
-                <li class="page-item disabled"><span class="page-link">First</span></li>
-                <li class="page-item disabled"><span class="page-link">Previous</span></li>
-            {% endif %}
+    </div>     {% if assets.has_other_pages %}
+        <nav aria-label="Page navigation">
+            <ul class="pagination justify-content-center">
+                {% if assets.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page=1&{{ request.GET.urlencode|cut:'page=' }}">First</a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ assets.previous_page_number }}&{{ request.GET.urlencode|cut:'page=' }}">Previous</a>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled"><span class="page-link">First</span></li>
+                    <li class="page-item disabled"><span class="page-link">Previous</span></li>
+                {% endif %}
 
-            <li class="page-item active" aria-current="page">
-                <span class="page-link">Page {{ assets.number }} of {{ assets.paginator.num_pages }}</span>
-            </li>
-            
-            {% if assets.has_next %}
-                <li class="page-item"><a class="page-link" href="?page={{ assets.next_page_number }}{{ request|current_query }}">Next</a></li>
-                <li class="page-item"><a class="page-link" href="?page={{ assets.paginator.num_pages }}{{ request|current_query }}">Last</a></li>
-            {% else %}
-                <li class="page-item disabled"><span class="page-link">Next</span></li>
-                <li class="page-item disabled"><span class="page-link">Last</span></li>
-            {% endif %}
-        </ul>
-    </nav>
-{% endblock content %}
+                <li class="page-item active" aria-current="page">
+                    <span class="page-link">Page {{ assets.number }} of {{ assets.paginator.num_pages }}</span>
+                </li>
+
+                {% if assets.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ assets.next_page_number }}&{{ request.GET.urlencode|cut:'page=' }}">Next</a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ assets.paginator.num_pages }}&{{ request.GET.urlencode|cut:'page=' }}">Last</a>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled"><span class="page-link">Next</span></li>
+                    <li class="page-item disabled"><span class="page-link">Last</span></li>
+                {% endif %}
+            </ul>
+        </nav>
+    {% elif assets %}
+        <nav aria-label="Page navigation">
+            <ul class="pagination justify-content-center">
+                <li class="page-item active"><span class="page-link">Page 1 of 1</span></li>
+            </ul>
+        </nav>
+    {% endif %}
+
+
+    <div class="floating-cart-widget shadow p-2 bg-light rounded-pill d-flex align-items-center" id="floating-cart-widget" 
+          {% if mixed_sale_count == 0 %}style="opacity: 0; pointer-events: none;"{% endif %}>
+        <span class="badge bg-danger rounded-pill me-2" id="cart-item-count">{{ mixed_sale_count }}</span>
+        <span class="me-3">Items for Mixed Sale</span>
+        <a href="{% url 'finalize_mixed_sale' %}" class="btn btn-sm btn-warning">Finalize Sale</a>
+    </div>
+
+{% endblock content %} 
+
+
+{% block extra_js %} 
+<script>
+    // CSRF Token setup for AJAX
+    // NOTE: The CSRF token needs to be included in your base.html for this to work.
+    const csrfTokenElement = document.querySelector('[name=csrfmiddlewaretoken]');
+    const csrfToken = csrfTokenElement ? csrfTokenElement.value : null;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        
+        const cartWidget = document.getElementById('floating-cart-widget');
+        const cartCount = document.getElementById('cart-item-count');
+
+        document.querySelectorAll('.add-to-cart-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                if (!csrfToken) {
+                    console.error("CSRF token not found. Cannot perform AJAX request.");
+                    return;
+                }
+                
+                const assetId = this.dataset.assetId;
+                const url = this.dataset.url;
+                
+                fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ asset_pk: assetId })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Update the button state
+                        this.classList.remove('btn-info', 'add-to-cart-btn');
+                        this.classList.add('btn-success');
+                        this.disabled = true;
+                        this.innerHTML = 'In Cart ✔️';
+
+                        // Update the floating cart widget
+                        cartCount.textContent = data.mixed_sale_count;
+                        cartWidget.style.opacity = 1;
+                        cartWidget.style.pointerEvents = 'auto';
+
+                        // Display a temporary success message
+                        const tempMessage = document.createElement('div');
+                        tempMessage.className = 'alert alert-success fixed-top m-3';
+                        tempMessage.textContent = data.message;
+                        document.body.appendChild(tempMessage);
+                        setTimeout(() => tempMessage.remove(), 3000); 
+
+                    } else {
+                        alert('Error adding asset: ' + data.message);
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+            });
+        });
+    });
+</script>
+{% endblock extra_js %}

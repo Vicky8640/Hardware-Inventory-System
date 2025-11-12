@@ -40,6 +40,8 @@ INSTALLED_APPS = [
     'widget_tweaks',
     'inventory',  
     'mathfilters',  # <-- ADD THIS LINE
+    'crispy_forms',  # <--- ADD THIS LINE
+    'crispy_bootstrap5', # <-- Add this line (if using Bootstrap 5)
 
 ]
 
@@ -135,4 +137,9 @@ SHOP_LOGO_URL = r"C:\Users\vmbuvi\OneDrive - dtbafrica\Desktop\PS\HMS\Hms_Projec
 LOGIN_REDIRECT_URL = '/inventory/' # Use the asset_list view path
 
 # URL to redirect to if a user tries to access a protected page
-LOGIN_URL = '/accounts/login/' 
+LOGIN_URL = '/accounts/login/'
+
+LOGOUT_REDIRECT_URL = '/accounts/login/'
+
+CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
+CRISPY_TEMPLATE_PACK = "bootstrap5" 

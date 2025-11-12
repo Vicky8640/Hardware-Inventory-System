@@ -1,0 +1,15 @@
+{% extends "base.html" %} 
+{% load crispy_forms_tags %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Edit Asset: {{ asset.serial_number|default:asset.model_number }}</h2>
+    
+    <form method="post">
+        {% csrf_token %}
+        {{ form|crispy }}
+        <button type="submit" class="btn btn-success mt-3">Save Changes</button>
+        <a href="{% url 'asset_detail' asset_pk=asset.pk %}" class="btn btn-outline-secondary mt-3">Cancel</a>
+    </form>
+</div>
+{% endblock content %}

@@ -1,6 +1,6 @@
-# hms_project/inventory/urls.py - CLEANED VERSION
+# hms_project/inventory/urls.py - FINAL CLEANED VERSION
 
-from django.urls import path
+from django.urls import path # <-- Only need path here
 from . import views 
 
 urlpatterns = [
@@ -11,29 +11,29 @@ urlpatterns = [
     path('add/', views.add_asset_view, name='add_asset'), 
     
     # 3. Asset Detail View (Display, Maintenance, and Sale Forms)
-    path('asset/<int:pk>/', views.asset_detail_view, name='asset_detail'), 
+    path('asset/<int:asset_pk>/', views.asset_detail_view, name='asset_detail'),
+    path('asset/edit/<int:asset_pk>/', views.edit_asset_view, name='edit_asset'), 
     
     # 4. Update Status/Sale Logic (POST submission from Detail View)
     path('asset/<int:asset_pk>/update_status/', 
          views.update_asset_status_view, 
          name='update_asset_status'), 
-         
-    # 5. Maintenance Log Submission (POST submission from Detail View)
+    
+    # 5. Maintenance Log Submission
     path('asset/<int:asset_pk>/add_log/', 
          views.add_maintenance_log_view, 
          name='add_maintenance_log'),
          
-    # --- BULK SALE ---
+    # --- BULK SALE (Same Type) ---
     path('sale/bulk/', views.bulk_sale_view, name='bulk_sale'), 
 
-    # --- MIXED-ITEM SALE ---
+    # --- MIXED-ITEM SALE WORKFLOW ---
     path('sale/mixed/start/', views.start_mixed_sale_view, name='start_mixed_sale'), 
     path('sale/mixed/finalize/', views.finalize_mixed_sale_view, name='finalize_mixed_sale'), 
     path('sale/mixed/remove/<int:asset_pk>/', views.remove_from_mixed_sale_view, name='remove_from_mixed_sale'), 
 
-    # --- NEW CART MODIFICATION PATHS (Crucial for buttons) ---
-    # Keep these unique names and definitions
-    path('sale/mixed/add_one/<int:asset_pk>/', views.add_to_mixed_sale_from_list, name='add_to_mixed_sale_from_list'),
+    # --- AJAX CART ENDPOINT ---
+    path('sale/mixed/add_one/', views.add_to_mixed_sale, name='add_to_mixed_sale'), 
     
-    # ... any other UN-DUPLICATED paths ...
+    # NOTE: AUTH PATHS (login/logout) MUST BE REMOVED FROM HERE
 ]
