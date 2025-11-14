@@ -29,11 +29,13 @@ class AssetForm(forms.ModelForm):
 
 # --- 2. Form for Quick Bulk Sale ---
 class BulkSaleForm(forms.Form):
+    # Existing fields
     asset_type = forms.ModelChoiceField(
-        queryset=AssetType.objects.all().order_by('name'),
-        label="Asset Type to Sell",
-        help_text="Select the type of asset you are selling in bulk.",
-        widget=forms.Select(attrs={'class': 'form-select'}) 
+        # FIX: Provide a valid queryset
+        queryset=AssetType.objects.all().order_by('name'), 
+        label="Asset Type to Sell:",
+        empty_label="-----------", # Optional: Ensures a clean starting state
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     quantity = forms.IntegerField(
@@ -49,6 +51,11 @@ class BulkSaleForm(forms.Form):
         min_value=0.01,
         label="Sale Price (Per Unit)",
         widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'})
+    )
+    location = forms.ChoiceField(
+        choices=HardwareAsset.LOCATION_CHOICES,
+        label="Location to Sell From",
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
 
 # --- 3. Form for Asset Filtering (Inventory List) ---
@@ -74,13 +81,15 @@ class AssetFilterForm(forms.Form):
     )
 
 # --- 4. Form for Mixed Sale Finalization (The Checkout) ---
-class FinalizeMixedSaleForm(forms.Form):
-    total_sale_price = forms.DecimalField(
-        max_digits=10, 
-        decimal_places=2, 
-        label="Total Sale Price (for all items in cart)",
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': 0.01})
-    )
+class MixedSaleForm(forms.Form):
+    sale_notes = forms.CharField(required=False, widget=forms.Textarea(attrs={'rows': 2}))
+    # Add other fields here as needed later, ensuring no ModelChoiceField uses '...'
+
+# --- 5. Clean Placeholder Form (If needed for other views) ---
+class AssetUpdateForm(forms.ModelForm):
+    class Meta:
+        model = HardwareAsset
+        fields = ['status', 'location', 'warranty_end_date']
     # Add other fields like customer, sale notes, etc., as needed
 
 # --- NEW FORM DEFINITION ---

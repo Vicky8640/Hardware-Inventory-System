@@ -1,72 +1,156 @@
 {% extends "base.html" %}
-{% load crispy_forms_tags %} 
 {% load static %}
 
 {% block title %}Finalize Mixed Sale | {{ SHOP_NAME }}{% endblock %}
 
 {% block content %}
-    <h1 class="h3 mb-4">Finalize Mixed Sale (Checkout)</h1>
-    
-    {% include "inventory/_messages.html" %}
+<div class="row">
+    <div class="col-12">
+        <h2>Finalize Mixed Sale (Checkout)</h2>
+    </div>
+</div>
 
-    <div class="row">
-        <div class="col-lg-8">
-            <div class="card shadow mb-4">
-                <div class="card-header bg-warning text-dark">
-                    <h5 class="mb-0">Assets to be Sold ({{ assets|length }} items)</h5>
-                </div>
+<form method="POST">
+    {% csrf_token %}
+    
+    <div class="row mt-4">
+        
+        <div class="col-md-8">
+            <div class="card border-warning">
                 <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table table-sm table-striped table-hover mb-0">
-                            <thead class="table-light">
-                                <tr>
+                        <table class="table table-striped table-sm mb-0">
+                            <thead>
+                                <tr class="table-dark">
                                     <th>Asset ID</th>
                                     <th>Type</th>
                                     <th>Model/S/N</th>
+                                    <th>Location</th>
                                     <th class="text-end">Purchase Price</th>
+                                    <th class="text-end fw-bold text-success">Sale Price</th> {# NEW COLUMN #}
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for asset in assets %}
-                                <tr>
-                                    <td>{{ asset.pk }}</td>
-                                    <td>{{ asset.asset_type.name }}</td>
-                                    <td>{{ asset.model_number }} / {{ asset.serial_number }}</td>
-                                    <td class="text-end">${{ asset.purchase_price|floatformat:2 }}</td>
-                                </tr>
+                                {% for key, asset_list in grouped_assets_list %}
+                                    {% with type_name=key.0|default:"UNKNOWN TYPE" location_name=key.1|default:"UNKNOWN LOCATION" %}
+                                    
+                                    <tr class="table-info">
+                                        <td colspan="4" class="text-start fw-bold">
+                                            {{ type_name }} @ {{ location_name }} 
+                                            ({{ asset_list|length }} item{{ asset_list|length|pluralize }})
+                                        </td>
+                                        <td colspan="2"></td> {# Span adjusted for new column #}
+                                    </tr>
+                                    
+                                    {% for asset in asset_list %}
+                                        <tr>
+                                            <td>{{ asset.pk|default:"" }}</td>
+                                            <td>{{ type_name }}</td>
+                                            <td>{{ asset.model_number|default:"N/A" }} / {{ asset.serial_number|default:"N/A" }}</td>
+                                            <td>{{ location_name }}</td>
+                                            <td class="text-end">${{ asset.purchase_price|floatformat:2|default:"0.00" }}</td>
+                                            
+                                            {# INPUT FIELD FOR INDIVIDUAL SALE PRICE #}
+                                            <td class="text-end">
+                                                <input type="number" 
+                                                       name="sale_price_{{ asset.pk }}" {# Critical: Unique name for each item #}
+                                                       class="form-control form-control-sm text-end"
+                                                       step="0.01" 
+                                                       min="{{ asset.purchase_price|floatformat:2|default:"0.00" }}"
+                                                       value="{{ asset.purchase_price|floatformat:2|default:"0.00" }}"
+                                                       required>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+
+                                    {% endwith %}
+                                
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted p-4">
+                                            No assets found in the cart session.
+                                        </td>
+                                    </tr>
                                 {% endfor %}
                             </tbody>
-                            <tfoot>
-                                <tr>
-                                    <td colspan="3" class="fw-bold text-end">TOTAL PURCHASE COST:</td>
-                                    <td class="fw-bold text-end">${{ total_purchase_price|floatformat:2 }}</td>
-                                </tr>
-                            </tfoot>
                         </table>
                     </div>
                 </div>
+
+                <div class="card-footer text-end">
+                    <strong>TOTAL PURCHASE COST:</strong> 
+                    <span class="fs-5">${{ total_purchase_cost|floatformat:2 }}</span>
+                </div>
             </div>
         </div>
-
-        <div class="col-lg-4">
-            <div class="card shadow">
+        
+        {# Sale Details block will now be outside the table form #}
+        {# Sale Details block (col-md-4) #}
+        <div class="col-md-4">
+            <div class="card border-success">
                 <div class="card-header bg-success text-white">
-                    <h5 class="mb-0">Sale Details</h5>
+                    <h5 class="mb-0">Finalize Sale</h5>
                 </div>
                 <div class="card-body">
-                    <form method="post">
-                        {% csrf_token %}
-                        {{ form|crispy }}
-                        
-                        <button type="submit" class="btn btn-success btn-lg mt-3 w-100">
-                            <i class="bi bi-check-circle me-2"></i> Confirm and Finalize Sale
-                        </button>
-                    </form>
-                    
-                    <a href="{% url 'asset_list' %}" class="btn btn-outline-secondary w-100 mt-2">Cancel & Return to Inventory</a>
+                    <h4 class="text-end mb-3">
+                        Total Sale Price: <span id="js-total-sale-price" class="fw-bold">$0.00</span>
+                    </h4>
+                    <p class="text-muted">The total sale price and profit will be calculated automatically upon submission based on the individual prices entered.</p>
+                    <hr>
+                    <button type="submit" class="btn btn-lg btn-success w-100 mb-2">
+                        <i class="bi bi-check-circle me-2"></i> Confirm and Finalize Sale
+                    </button>
+                    <a href="{% url 'asset_list' %}" class="btn btn-sm btn-outline-secondary w-100">
+                        Cancel & Return to Inventory
+                    </a>
                 </div>
             </div>
         </div>
+        
     </div>
-    
+</form>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 1. Get all the individual price input fields
+        const priceInputs = document.querySelectorAll('input[name^="sale_price_"]');
+        
+        // 2. Get the display element for the total
+        const totalDisplay = document.getElementById('js-total-sale-price');
+
+        // 3. Define the calculation function
+        function calculateTotalSalePrice() {
+            let total = 0;
+            
+            priceInputs.forEach(input => {
+                // Read the value, default to 0 if empty or invalid
+                const value = parseFloat(input.value) || 0;
+                
+                // Add to the total
+                total += value;
+            });
+
+            // Format the total for display
+            // Note: toLocaleString handles the currency formatting (like adding commas)
+            const formattedTotal = total.toLocaleString('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: 2
+            });
+
+            // Update the display element
+            totalDisplay.textContent = formattedTotal;
+        }
+
+        // 4. Attach the function to all input events
+        priceInputs.forEach(input => {
+            // Listen for key presses (input) and value changes (change)
+            input.addEventListener('input', calculateTotalSalePrice);
+            input.addEventListener('change', calculateTotalSalePrice);
+        });
+
+        // 5. Run the calculation once on load to show the initial default values
+        calculateTotalSalePrice();
+    });
+</script>
+
 {% endblock content %}

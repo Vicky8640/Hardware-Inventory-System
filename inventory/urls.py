@@ -30,10 +30,12 @@ urlpatterns = [
     # --- MIXED-ITEM SALE WORKFLOW ---
     path('sale/mixed/start/', views.start_mixed_sale_view, name='start_mixed_sale'), 
     path('sale/mixed/finalize/', views.finalize_mixed_sale_view, name='finalize_mixed_sale'), 
-    path('sale/mixed/remove/<int:asset_pk>/', views.remove_from_mixed_sale_view, name='remove_from_mixed_sale'), 
+#     path('sale/mixed/remove/<int:asset_pk>/', views.remove_from_mixed_sale_view, name='remove_from_mixed_sale'), 
 
     # --- AJAX CART ENDPOINT ---
     path('sale/mixed/add_one/', views.add_to_mixed_sale, name='add_to_mixed_sale'), 
-    
-    # NOTE: AUTH PATHS (login/logout) MUST BE REMOVED FROM HERE
+    path('sale/mixed/remove/', views.remove_from_mixed_sale, name='remove_from_mixed_sale'),    # NOTE: AUTH PATHS (login/logout) MUST BE REMOVED FROM HERE
+    path('sales/dashboard/', views.sales_dashboard_view, name='sales_dashboard'),
+    path('sales/export/', views.export_sales_data_view, name='export_sales_data'), # <-- ADD THIS
+    path('types/', views.asset_type_list_view, name='asset_type_list'), # <-- ADD THIS
 ]

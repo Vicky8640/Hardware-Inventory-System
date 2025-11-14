@@ -8,15 +8,23 @@ from django.contrib import messages
 from django.contrib.auth.views import LoginView # (Keep if using CustomLoginView)
 from django.contrib.auth import logout  # <-- Import logout from django.contrib.auth 
 from django.core.paginator import Paginator
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import datetime
 from django.http import JsonResponse
 import json 
 from django.contrib.messages.views import SuccessMessageMixin
 from django.utils import timezone # ⬅️ ADD THIS
-from .models import HardwareAsset as Asset, AssetType, SaleRecord, MaintenanceLog
+from .models import HardwareAsset as Asset, AssetType, SaleRecord, MaintenanceLog, MixedSale
 from .forms import AssetForm, BulkSaleForm, AssetFilterForm, MaintenanceLogForm # Ensure this line imports BulkSaleForm
+from collections import defaultdict
+from django.db.models.functions import TruncDate, Coalesce
+import logging
+import csv
+from django.http import HttpResponse # <-- Needed for export
+from django.db.models import Sum, Count, F, Q, Case, When, Value, CharField, DateField
+logger = logging.getLogger(__name__)
 # --- BASE CONTEXT HELPER (MODIFIED to accept request) ---
+@login_required
 def get_base_context(request=None): 
     """Returns the base context including branding variables and cart count."""
     context = {
@@ -35,6 +43,7 @@ def get_base_context(request=None):
     return context
 
 # --- HELPER: Serial Number Generator ---
+@login_required
 def get_next_serial_number(asset_type_obj, custom_serial=None):
     # Logic remains stable
     if custom_serial:
@@ -60,8 +69,6 @@ def get_next_serial_number(asset_type_obj, custom_serial=None):
 
 # --- 1. ASSET LIST VIEW (Fixed for template error) ---
 @login_required 
-## ⚙️ Corrected `asset_list_view`
-
 def asset_list_view(request): 
     status_filter = request.GET.get('status')
     location_filter = request.GET.get('location')
@@ -101,49 +108,60 @@ def asset_list_view(request):
     return render(request, 'inventory/asset_list.html', context)
 
 # --- 2. AJAX CART VIEW (Stable) ---
+CART_KEY = 'mixed_sale_cart'
 @login_required
 @require_http_methods(["POST"]) 
 def add_to_mixed_sale(request):
-    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-        try:
-            data = json.loads(request.body)
-            asset_pk_str = str(data.get('asset_pk'))
-        except (json.JSONDecodeError, KeyError):
-            return JsonResponse({'success': False, 'message': 'Invalid data format or missing asset_pk.'}, status=400)
-
-        cart = request.session.get('mixed_sale_assets', [])
+    
+    # 1. Decode the JSON body
+    try:
+        data = json.loads(request.body)
+        asset_pk_str = str(data.get('asset_pk'))
         
-        try:
-            asset = Asset.objects.get(pk=asset_pk_str, status='IN_STOCK')
+        if not asset_pk_str or asset_pk_str == 'None':
+             return JsonResponse({'success': False, 'message': 'Missing asset_pk.'}, status=400)
+             
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid JSON format.'}, status=400)
+    except KeyError:
+        return JsonResponse({'success': False, 'message': 'Missing required key asset_pk.'}, status=400)
+        
+    # 2. Retrieve the current cart and check asset availability
+    # FIX: Using the standardized CART_KEY
+    cart = request.session.get(CART_KEY, [])
+    
+    try:
+        # Check if asset exists and is in stock
+        Asset.objects.get(pk=asset_pk_str, status='IN_STOCK')
+        
+        if asset_pk_str not in cart:
+            # 3. Add to cart (session)
+            cart.append(asset_pk_str)
             
-            if asset_pk_str not in cart:
-                cart.append(asset_pk_str)
-                request.session['mixed_sale_assets'] = cart
-                request.session.modified = True
-                
-                return JsonResponse({
-                    'success': True,
-                    'mixed_sale_count': len(cart),
-                    'message': f"Asset {asset_pk_str} added to cart."
-                })
-            else:
-                return JsonResponse({
-                    'success': True,
-                    'mixed_sale_count': len(cart),
-                    'message': f"Asset {asset_pk_str} is already in the cart."
-                })
-                
-        except Asset.DoesNotExist:
+            # FIX: Saving to the standardized CART_KEY
+            request.session[CART_KEY] = cart
+            request.session.modified = True
+            
             return JsonResponse({
-                'success': False,
+                'success': True,
                 'mixed_sale_count': len(cart),
-                'message': f"Error: Asset {asset_pk_str} not found or not in stock."
-            }, status=404)
+                'message': f"Asset {asset_pk_str} added to cart."
+            })
+        else:
+            # 4. Asset already in cart
+            return JsonResponse({
+                'success': True, 
+                'mixed_sale_count': len(cart),
+                'message': f"Asset {asset_pk_str} is already in the cart."
+            })
             
-    return JsonResponse({'success': False, 'message': 'Invalid request method or format.'}, status=400)
-
-
-# --- 3. BULK SALE VIEW (FIXED: NameError and context scope) ---
+    except Asset.DoesNotExist:
+        # 5. Asset not found or not in stock
+        return JsonResponse({
+            'success': False,
+            'mixed_sale_count': len(cart),
+            'message': f"Error: Asset {asset_pk_str} not found or is currently unavailable."
+        }, status=404)
 @login_required
 def bulk_sale_view(request):
     # Initialize form for GET/rendering
@@ -153,51 +171,58 @@ def bulk_sale_view(request):
     if request.method == 'POST':
         form = BulkSaleForm(request.POST)
         
-        # 🎯 FIX: Corrected indentation for POST logic
         if form.is_valid():
             asset_type = form.cleaned_data['asset_type']
             quantity = form.cleaned_data['quantity']
-            # Assuming the form field is correctly named 'sale_price_per_unit'
-            # NEW LINE 174 (Corrected key)
-            price_per_unit = form.cleaned_data['unit_sale_price']            
-            # Ensure price is a Decimal for calculations
+            price_per_unit = form.cleaned_data['unit_sale_price']
+            
+            # 🎯 NEW: Get the location from the form
+            location = form.cleaned_data['location']
+            
+            # Ensure price is a Decimal for precise calculations
             try:
-                price_per_unit = float(price_per_unit)
-            except (ValueError, TypeError):
+                # Cast the price to Decimal using the imported Decimal class
+                price_per_unit_decimal = Decimal(price_per_unit)
+            except Exception:
                 messages.error(request, "Invalid price per unit.")
                 return redirect('bulk_sale')
 
-            total_sale_amount = quantity * price_per_unit
+            total_sale_amount = price_per_unit_decimal * Decimal(quantity)
             
-            # 1. Get the assets to sell
+            # 1. Get the assets to sell, NOW FILTERED BY LOCATION
             # Use select_for_update to lock assets during transaction
             assets_to_sell = Asset.objects.filter(
                 asset_type=asset_type,
-                status='IN_STOCK'
-            ).order_by('purchase_date')[:quantity]
+                status='IN_STOCK',
+                location=location # <-- CRITICAL FILTER ADDED HERE
+            ).order_by('purchase_date').select_for_update()[:quantity] # Lock selected assets
             
             if len(assets_to_sell) < quantity:
-                messages.error(request, f"Not enough assets in stock for {asset_type.name}. Requested: {quantity}, Available: {len(assets_to_sell)}")
+                messages.error(request, f"Not enough assets in stock at {location} for {asset_type.name}. Requested: {quantity}, Available: {len(assets_to_sell)}")
                 return redirect('bulk_sale')
 
             try:
                 # Use a transaction to ensure all updates succeed or fail together
                 with transaction.atomic():
                     # 2. Create the SaleRecord object
+                    # NOTE: Assuming SaleRecord has a location field. If not, you must add it.
                     sale_record = SaleRecord.objects.create(
                         total_sale_price=total_sale_amount, 
-                        sale_type='BULK' 
+                        sale_type='BULK',
+                        # Optionally add the location to the SaleRecord itself
+                        # location=location 
                     )
 
                     # 3. Update the individual Assets
                     for asset in assets_to_sell:
                         asset.status = 'SOLD'
                         asset.sale_record = sale_record
-                        asset.individual_sale_price = price_per_unit
+                        asset.individual_sale_price = price_per_unit_decimal
+                        # No need to update asset.location as the filter ensured it was correct
                         asset.save()
                         
                 # 4. CRITICAL: REDIRECT AFTER SUCCESSFUL TRANSACTION
-                messages.success(request, f"Successfully marked {quantity} units of {asset_type.name} as SOLD for a total of ${total_sale_amount:,.2f}.")
+                messages.success(request, f"Successfully marked {quantity} units of {asset_type.name} from {location} as SOLD for a total of ${total_sale_amount:,.2f}.")
                 return redirect('asset_list')
                 
             except Exception as e:
@@ -209,10 +234,8 @@ def bulk_sale_view(request):
     context = {
         'form': form,
         'assets_to_sell': assets_to_sell, 
-        # Add get_base_context(request) if you use it for layout variables
     }
     
-    # 🎯 Template Name Check: Based on your file tree, the file is 'bulk_sale.html'
     return render(request, 'inventory/bulk_sale.html', context)
 # --- 4. DUMMY/PLACEHOLDER VIEWS (Stable) ---
 @login_required 
@@ -289,7 +312,6 @@ from django.shortcuts import render, get_object_or_404
 # You may need to import your AssetRetirementSale model here
 # from .models import Asset, AssetRetirementSale # <-- make sure this is imported
 @login_required
-@login_required
 def asset_detail_view(request, asset_pk):
     """
     Displays detailed information for a single asset, including core data,
@@ -348,71 +370,142 @@ def start_mixed_sale_view(request):
 @login_required
 @require_http_methods(["GET", "POST"])
 def finalize_mixed_sale_view(request):
-    # Use the name from the floating cart (asset_list.html)
-    asset_pks = request.session.get('mixed_sale_assets', []) 
-    assets = Asset.objects.filter(pk__in=asset_pks, status='IN_STOCK')
+    CART_KEY = 'mixed_sale_cart'
+    # 1. FETCH ASSET IDs (Used for both GET and POST)
+    cart_asset_pks = request.session.get(CART_KEY, [])
     
-    if not assets.exists():
-        messages.error(request, "No assets selected for sale in your cart.")
-        return redirect('asset_list')
-        
-    total_purchase_price = sum(asset.purchase_price for asset in assets)
-
+    # Check if cart is empty and redirect if necessary
+    if not cart_asset_pks:
+        messages.warning(request, "The mixed sale cart is empty.")
+        return redirect('asset_list') 
+    
+    # Fetch assets once for both POST and GET logic
+    assets_to_sell = Asset.objects.filter(pk__in=cart_asset_pks)
+    
+    # 2. POST REQUEST HANDLING (Form Submission)
     if request.method == 'POST':
-        form = FinalizeMixedSaleForm(request.POST)
-        if form.is_valid():
-            total_sale_price = form.cleaned_data['total_sale_price']
+        
+        total_sale_price = Decimal('0.00')
+        sale_data = {}
+        validation_error = False
+        
+        # Process the posted individual sale prices
+        for asset in assets_to_sell:
+            input_name = f'sale_price_{asset.pk}'
+            sale_price_str = request.POST.get(input_name, '0.00')
             
             try:
-                with transaction.atomic():
-                    # 1. Create SaleRecord
-                    sale_record = SaleRecord.objects.create(
-                        total_sale_price=total_sale_price,
-                        sale_type='MIXED',
-                        # ... other sale details ...
-                    )
-                    
-                    # 2. Update all assets in the cart
-                    for asset in assets:
-                        asset.status = 'SOLD'
-                        asset.sale_record = sale_record
-                        asset.save()
-                        
-                    # 3. Clear the session cart
-                    del request.session['mixed_sale_assets']
-                    messages.success(request, f"Successfully sold {assets.count()} mixed asset(s) for ${total_sale_price:.2f}!")
-                    return redirect('asset_list')
-            except Exception as e:
-                messages.error(request, f"An error occurred during sale finalization: {e}")
+                sale_price = Decimal(sale_price_str)
+                profit_loss = sale_price - asset.purchase_price
                 
-    else:
-        # Default sale price: e.g., 10% markup on total purchase price
-        default_sale_price = total_purchase_price * 1.10 
-        form = FinalizeMixedSaleForm(initial={'total_sale_price': default_sale_price})
+                sale_data[asset.pk] = {
+                    'sale_price': sale_price,
+                    'profit_loss': profit_loss,
+                }
+                
+                total_sale_price += sale_price
+                
+            except InvalidOperation:
+                messages.error(request, f"Invalid price entered for Asset ID {asset.pk}. Please use a valid number.")
+                validation_error = True
+                break # Exit the loop immediately on error
 
+        # If there were validation errors, fall through to the GET context rendering
+        if validation_error:
+            # Code falls to the rendering block at the bottom
+            pass
+        
+        # If no validation errors, proceed with saving the transaction
+        else: 
+            # 3. Create and Save Records
+            with transaction.atomic():
+                total_purchase_cost = sum(asset.purchase_price for asset in assets_to_sell)
+
+                mixed_sale = MixedSale.objects.create(
+                    total_sale_price=total_sale_price,
+                    total_purchase_cost=total_purchase_cost,
+                    sale_date=timezone.now(),
+                    # user=request.user, # Recommended
+                )
+                
+                # 4. Update EACH Asset
+            for asset in assets_to_sell:
+                data = sale_data[asset.pk]
+                
+                # FIX: Assign the MixedSale instance to the NEW 'mixed_sale' field
+                asset.mixed_sale = mixed_sale 
+
+                asset.individual_sale_price = data['sale_price']
+                #asset.profit_loss = data['profit_loss']
+                asset.status = 'SOLD'
+                
+                asset.save()
+                    
+            # 5. Clear the cart and REDIRECT after successful save
+            request.session.pop(CART_KEY, None)
+            messages.success(request, f"Sale of {len(assets_to_sell)} items finalized successfully!")
+            return redirect('asset_list') # Final successful exit
+
+    # 6. GET REQUEST/FALLBACK HANDLING (Render the Page)
+    # This code runs on a GET request, or if the POST request hits a validation error.
+    
+    # Group assets for template display (using the previously fetched assets_to_sell)
+    grouped_assets = defaultdict(list)
+    total_purchase_cost = Decimal('0.00')
+    
+    for asset in assets_to_sell:
+        type_name = asset.asset_type.name if asset.asset_type else 'NO TYPE ASSIGNED'
+        location_name = asset.get_location_display() or 'UNKNOWN LOCATION'
+        grouped_assets[(type_name, location_name)].append(asset)
+        total_purchase_cost += asset.purchase_price
+    
+    logger.warning(f"Grouped Assets: {grouped_assets.items()}")
+    
     context = {
-        'assets': assets,
-        'form': form,
-        'total_purchase_price': total_purchase_price
+        'assets_to_sell': assets_to_sell,
+        'grouped_assets_list': list(grouped_assets.items()), 
+        'total_purchase_cost': total_purchase_cost,
     }
-    return render(request, 'inventory/mixed_sale_finalize.html', context) # Renders the new finalization template
+    return render(request, 'inventory/mixed_sale_finalize.html', context)
 @login_required
-@require_http_methods(["GET", "POST"])
-def remove_from_mixed_sale_view(request, asset_pk):
-    asset_pk_str = str(asset_pk) 
+@require_http_methods(["POST"]) 
+def remove_from_mixed_sale(request):
+    """
+    Removes an asset from the session-based mixed sale cart via an AJAX POST request.
+    """
+    
+    # 1. Decode the JSON body
+    try:
+        data = json.loads(request.body)
+        asset_pk_str = str(data.get('asset_pk'))
+        
+        if not asset_pk_str or asset_pk_str == 'None':
+             return JsonResponse({'success': False, 'message': 'Missing asset_pk.'}, status=400)
+             
+    except (json.JSONDecodeError, KeyError):
+        return JsonResponse({'success': False, 'message': 'Invalid data format or missing asset_pk.'}, status=400)
+        
+    # 2. Get the current cart from the session
     cart = request.session.get('mixed_sale_assets', [])
     
+    # 3. Perform removal
     if asset_pk_str in cart:
         cart.remove(asset_pk_str)
         request.session['mixed_sale_assets'] = cart
-        request.session.modified = True 
+        request.session.modified = True
         
-        messages.success(request, f"Asset ID {asset_pk} was successfully removed from the mixed sale cart.")
-        
+        return JsonResponse({
+            'success': True,
+            'mixed_sale_count': len(cart),
+            'message': f"Asset {asset_pk_str} removed from cart."
+        })
     else:
-        messages.warning(request, f"Asset ID {asset_pk} was not found in the mixed sale cart.")
-
-    return redirect('finalize_mixed_sale')
+        # Item was already missing, still return success to update button state
+        return JsonResponse({
+            'success': True,
+            'mixed_sale_count': len(cart),
+            'message': f"Asset {asset_pk_str} was not found in the cart (no change made)."
+        })
 
 # inventory/views.py (Add this function)
 
@@ -465,3 +558,159 @@ class CustomLoginView(SuccessMessageMixin, LoginView):
     success_message = "Welcome! You have successfully logged in."
     # Redirect URL is usually set by LOGIN_REDIRECT_URL in settings.py
     # If not set, it defaults to /accounts/profile/
+
+@login_required
+def sales_dashboard_view(request):
+    # Base Query: Filter for all assets marked as SOLD
+    # NOTE: Assuming 'Asset' in your original snippet is 'HardwareAsset'
+    sold_assets = Asset.objects.filter(status='SOLD') 
+    
+    # --- 1. Total Sales Metrics (Calculated from individual assets) ---
+    total_metrics = sold_assets.aggregate(
+        total_revenue=Sum('individual_sale_price'),
+        # CRITICAL FIX: Calculate the sum of (Sale Price - Purchase Price)
+        net_profit=Sum(F('individual_sale_price') - F('purchase_price')),
+        total_sales_count=Count('pk') # Total number of items sold
+    )
+    
+    # Calculate Total Transactions: Sum of unique SaleRecord IDs and unique MixedSale IDs
+    transaction_count = SaleRecord.objects.all().count() + MixedSale.objects.all().count()
+    
+    # Clean up None values
+    total_metrics['total_revenue'] = total_metrics['total_revenue'] or 0
+    total_metrics['net_profit'] = total_metrics['net_profit'] or 0
+    total_metrics['total_sales_count'] = sold_assets.count()
+    total_metrics['total_transactions'] = transaction_count 
+
+    # --- 2. Sales by Type (Bulk vs. Mixed) ---
+    # Annotate each asset with its sale type (Mixed or Bulk)
+    sales_by_type_annotated = sold_assets.annotate(
+        # Use Case/When to assign a clear label based on which FK is NOT NULL
+        sale_type_label=Case(
+            When(sale_record__isnull=False, then=Value('BULK')),
+            When(mixed_sale__isnull=False, then=Value('MIXED')),
+            default=Value('UNKNOWN'), # Catch unassigned sold assets
+            output_field=CharField()
+        )
+    )
+    
+    # Group by the new annotated field
+    sales_by_type_grouped = sales_by_type_annotated.values('sale_type_label').annotate(
+        revenue=Sum('individual_sale_price'),
+        profit=Sum(F('individual_sale_price') - F('purchase_price')),
+        assets_sold=Count('pk')
+    ).order_by('sale_type_label')
+
+    # Add transaction count back in 
+    bulk_txns = SaleRecord.objects.all().count()
+    mixed_txns = MixedSale.objects.all().count()
+
+    final_sales_by_type = []
+    for entry in sales_by_type_grouped:
+        if entry['sale_type_label'] == 'BULK':
+            entry['transaction_count'] = bulk_txns
+        elif entry['sale_type_label'] == 'MIXED':
+            entry['transaction_count'] = mixed_txns
+        else:
+             entry['transaction_count'] = 0 # Handle UNKNOWN sales
+        
+        final_sales_by_type.append(entry)
+
+
+    # --- 3. Sales Trend by Date (FIXED GROUPING BY DAY) ---
+    
+    sales_by_date = sold_assets.annotate(
+        # Use Coalesce to pick the date from MixedSale or SaleRecord
+        sale_date=Coalesce(
+            F('mixed_sale__sale_date'), 
+            F('sale_record__sale_date'),
+            output_field=DateField() # Coalesce returns a DateField
+        )
+    ).filter(sale_date__isnull=False).annotate(
+        # Use TruncDate on the Coalesced date field for grouping by day
+        date_group=TruncDate('sale_date') 
+    ).values('date_group').annotate(
+        daily_revenue=Sum('individual_sale_price'),
+        daily_profit=Sum(F('individual_sale_price') - F('purchase_price')),
+        daily_assets_sold=Count('pk') # This counts assets sold per day
+    ).order_by('-date_group')
+
+    context = get_base_context(request)
+    context.update({
+        'total_metrics': total_metrics,
+        'sales_by_type': final_sales_by_type,
+        'sales_by_date': sales_by_date,
+    })
+    
+    return render(request, 'inventory/sales_dashboard.html', context)
+
+
+# ----------------------------------------------------
+# B. Export Sales Data View 
+# --------------------------------------------
+@login_required
+def export_sales_data_view(request):
+    """
+    Exports sales data (HardwareAsset records) to a CSV file.
+    """
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="sales_export.csv"'
+
+    writer = csv.writer(response)
+    
+    writer.writerow([
+        'Asset ID', 
+        'Type', 
+        'Model', 
+        'Serial Number', 
+        'Status', 
+        'Purchase Price', 
+        'Sale Price', 
+        'Profit', 
+        'Sale Date',
+        'Sale Type' 
+    ])
+
+    sold_assets = Asset.objects.filter(status='SOLD').select_related(
+        'asset_type', 'mixed_sale', 'sale_record'
+    ).order_by('pk')
+
+    for asset in sold_assets:
+        sale_date = None
+        sale_type = None
+        
+        if asset.mixed_sale:
+            sale_date = asset.mixed_sale.sale_date.strftime('%Y-%m-%d')
+            sale_type = 'Mixed'
+        elif asset.sale_record:
+            sale_date = asset.sale_record.sale_date.strftime('%Y-%m-%d')
+            sale_type = 'Bulk'
+
+        # Note: Assumes asset.profit_loss property is defined on the HardwareAsset model
+        writer.writerow([
+            asset.pk,
+            asset.asset_type.name if asset.asset_type else '',
+            asset.model_number,
+            asset.serial_number,
+            asset.get_status_display(),
+            asset.purchase_price,
+            asset.individual_sale_price,
+            asset.profit_loss, 
+            sale_date,
+            sale_type
+        ])
+
+    return response
+
+@login_required
+def asset_type_list_view(request):
+    """
+    Displays a list of all defined Asset Types.
+    """
+    asset_types = AssetType.objects.all().order_by('name')
+    
+    context = {
+        'asset_types': asset_types,
+        'title': 'Manage Asset Types'
+    }
+    return render(request, 'inventory/asset_type_list.html', context)

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% load static %}
+{% load humanize %} 
+
+{% block title %}Sales Dashboard{% endblock %}
+
+{% block header_title %}Sales Dashboard{% endblock %}
+
+{% block content %}
+<div class="container mt-4 mb-5">
+    <h2 class="mb-4">📊 Sales Performance Dashboard</h2>
+    
+    {# --- EXPORT BUTTON (Already Correct) --- #}
+    <div class="d-flex justify-content-end mb-4">
+    <a href="{% url 'export_sales_data' %}" class="btn btn-success">
+        <i class="bi bi-download"></i> Export Data to CSV
+    </a>
+    </div>
+
+    {# --- SECTION 1: TOTAL METRICS (FIXED CARD SIZE) --- #}
+    <div class="row g-3 mb-5">
+        {# Using col-md-3 for three metrics + col-md-3 for spacing makes a 12-column grid #}
+        <div class="col-md-3"> 
+            <div class="card text-center bg-light shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title text-muted">Total Revenue</h5>
+                    <h3 class="text-success">${{ total_metrics.total_revenue|default:0|intcomma }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center bg-light shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title text-muted">Net Profit</h5>
+                    <h3 class="text-info">${{ total_metrics.net_profit|default:0|intcomma }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center bg-light shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title text-muted">Total Transactions</h5>
+                    <h3 class="text-primary">{{ total_metrics.total_transactions|default:0|intcomma }}</h3> 
+                </div>
+            </div>
+        </div>
+        {# Add a spacing column to keep the layout clean #}
+        <div class="col-md-3"></div> 
+    </div>
+
+    <hr>
+
+    {# --- SECTION 2: SALES BY TYPE (Keys Corrected) --- #}
+    <h3 class="mb-3">Sales Breakdown by Type</h3>
+    <table class="table table-bordered table-hover shadow-sm">
+        <thead class="table-primary">
+            <tr>
+                <th>Sale Type</th>
+                <th>Transactions</th>
+                <th>Assets Sold</th>
+                <th>Revenue</th>
+                <th>Profit</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for sale_type_data in sales_by_type %}
+            <tr>
+                <td>**{{ sale_type_data.sale_type_label }}**</td> 
+                <td>{{ sale_type_data.transaction_count }}</td>
+                <td>{{ sale_type_data.assets_sold }}</td>
+                <td>${{ sale_type_data.revenue|default:0|intcomma }}</td>
+                <td>${{ sale_type_data.profit|default:0|intcomma }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="text-center">No sales data available.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <hr>
+
+    {# --- SECTION 3: DATE TRACKING / TREND (Keys and Endfor Corrected) --- #}
+    <h3 class="mb-3">Sales Trend by Day</h3>
+    <div style="max-height: 400px; overflow-y: auto;">
+        <table class="table table-striped table-sm shadow-sm">
+            <thead class="table-dark sticky-top">
+                <tr>
+                    <th>Date</th>
+                    <th>Assets Sold</th>
+                    <th>Revenue</th>
+                    <th>Profit</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for daily_data in sales_by_date %}
+                <tr>
+                    <td>{{ daily_data.date_group|date:"Y-m-d" }}</td> 
+                    <td>{{ daily_data.daily_assets_sold }}</td>
+                    <td>${{ daily_data.daily_revenue|default:0|intcomma }}</td>
+                    <td>${{ daily_data.daily_profit|default:0|intcomma }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" class="text-center">No daily trend data available.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+</div>
+{% endblock content %}

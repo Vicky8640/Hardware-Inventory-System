@@ -27,13 +27,30 @@
     }
     
     /* Styling for the Floating Cart Widget */
-    .floating-cart-widget {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        z-index: 1050; 
-        transition: opacity 0.3s ease-in-out;
-    }
+    /* Styling for the Floating Cart Widget */
+    .floating-cart-widget {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1050; 
+        transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+        
+        /* === Enhanced Visibility Styles === */
+        padding: 10px 20px !important; 
+        background-color: #0d6efd !important; /* Change background to Blue (Primary) */
+        color: white; /* White text for high contrast */
+        border-radius: 50px !important; /* Fully rounded pill shape */
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); /* Stronger shadow */
+        transform: scale(1.05); /* Slightly enlarge it to draw attention */
+        cursor: pointer; /* Indicate it's interactive */
+    }
+
+    /* Style for the badge inside the widget */
+    .floating-cart-widget #cart-item-count {
+        background-color: #dc3545 !important; /* Red badge for urgency */
+        font-size: 1rem;
+        font-weight: bold;
+    }
 </style>
 {% endblock custom_styles %}
 
@@ -41,20 +58,6 @@
 
 {% block content %}
 
-
-    <div class="row mb-3">
-        <div class="col-md-auto">
-            <a href="{% url 'add_asset' %}" class="btn btn-primary">
-                <i class="bi bi-plus-circle me-1"></i> + Add New Asset
-            </a>
-        </div>
-        <div class="col-md-auto">
-            <a href="{% url 'bulk_sale' %}" class="btn btn-success">
-                <i class="bi bi-box-seam me-1"></i> Quick Bulk Sale (Same Type)
-            </a>
-        </div>
-    </div>
-    
     <div class="content-area">
 
         <div class="filter-section p-3 mb-2"> 
@@ -145,12 +148,17 @@
                                 {% if asset.pk|stringformat:"s" not in request.session.mixed_sale_assets|default:'' %}
                                     <button class="btn btn-sm btn-info add-to-cart-btn" 
                                             data-asset-id="{{ asset.pk }}" 
-                                            data-url="{% url 'add_to_mixed_sale' %}"> 
-                                        Add to Cart
+                                            data-action="add"                                       data-add-url="{% url 'add_to_mixed_sale' %}"            data-remove-url="{% url 'remove_from_mixed_sale' %}">   Add to Cart
                                     </button>
-                                {% else %}
-                                    <button class="btn btn-sm btn-success" disabled>In Cart ✔️</button>
-                                {% endif %} 
+                            {% else %}
+                                <button class="btn btn-sm btn-danger remove-from-cart-btn" 
+                                        data-asset-id="{{ asset.pk }}" 
+                                        data-action="remove"
+                                        data-add-url="{% url 'add_to_mixed_sale' %}" 
+                                        data-remove-url="{% url 'remove_from_mixed_sale' %}"> 
+                                    Remove ✖️
+                                </button>
+                            {% endif %}
                             {% else %}
                                 <button class="btn btn-sm btn-secondary" disabled>Unavailable</button>
                             {% endif %} 
@@ -208,13 +216,13 @@
     {% endif %}
 
 
-    <div class="floating-cart-widget shadow p-2 bg-light rounded-pill d-flex align-items-center" id="floating-cart-widget" 
-          {% if mixed_sale_count == 0 %}style="opacity: 0; pointer-events: none;"{% endif %}>
-        <span class="badge bg-danger rounded-pill me-2" id="cart-item-count">{{ mixed_sale_count }}</span>
-        <span class="me-3">Items for Mixed Sale</span>
-        <a href="{% url 'finalize_mixed_sale' %}" class="btn btn-sm btn-warning">Finalize Sale</a>
-    </div>
-
+    <div class="floating-cart-widget shadow d-flex align-items-center" id="floating-cart-widget" 
+        {% if mixed_sale_count == 0 %}style="opacity: 0; pointer-events: none;"{% endif %}>
+        
+        <i class="bi bi-cart-fill me-2 fs-5"></i> <span class="badge rounded-pill me-2" id="cart-item-count">{{ mixed_sale_count }}</span>
+        <span class="me-3">Items for Mixed Sale</span>
+        <a href="{% url 'finalize_mixed_sale' %}" class="btn btn-sm btn-warning">Finalize Sale</a>
+    </div>
 {% endblock content %} 
 
 
@@ -222,60 +230,79 @@
 <script>
     // CSRF Token setup for AJAX
     // NOTE: The CSRF token needs to be included in your base.html for this to work.
-    const csrfTokenElement = document.querySelector('[name=csrfmiddlewaretoken]');
-    const csrfToken = csrfTokenElement ? csrfTokenElement.value : null;
+    
 
     document.addEventListener('DOMContentLoaded', function() {
-        
-        const cartWidget = document.getElementById('floating-cart-widget');
-        const cartCount = document.getElementById('cart-item-count');
+    
+    const csrfTokenElement = document.querySelector('[name=csrfmiddlewaretoken]');
+    const csrfToken = csrfTokenElement ? csrfTokenElement.value : null;
 
-        document.querySelectorAll('.add-to-cart-btn').forEach(button => {
-            button.addEventListener('click', function() {
-                if (!csrfToken) {
-                    console.error("CSRF token not found. Cannot perform AJAX request.");
-                    return;
-                }
-                
-                const assetId = this.dataset.assetId;
-                const url = this.dataset.url;
-                
-                fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRFToken': csrfToken,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ asset_pk: assetId })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        // Update the button state
-                        this.classList.remove('btn-info', 'add-to-cart-btn');
-                        this.classList.add('btn-success');
-                        this.disabled = true;
-                        this.innerHTML = 'In Cart ✔️';
+    const cartWidget = document.getElementById('floating-cart-widget');
+    const cartCount = document.getElementById('cart-item-count');
 
-                        // Update the floating cart widget
-                        cartCount.textContent = data.mixed_sale_count;
-                        cartWidget.style.opacity = 1;
-                        cartWidget.style.pointerEvents = 'auto';
+    // Selects both Add and Remove buttons
+    document.querySelectorAll('.add-to-cart-btn, .remove-from-cart-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            if (!csrfToken) {
+                console.error("CSRF token not found. Cannot perform AJAX request.");
+                return;
+            }
+            
+            const assetId = this.dataset.assetId;
+            const action = this.dataset.action;
+            
+            // Determine the URL based on the action
+            const url = (action === 'add') ? this.dataset.addUrl : this.dataset.removeUrl;
+            
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ asset_pk: assetId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update button state (Add -> Remove, or Remove -> Add)
+                    const newAction = (action === 'add') ? 'remove' : 'add';
+                    const newClass = (newAction === 'add') ? 'btn-info add-to-cart-btn' : 'btn-danger remove-from-cart-btn';
+                    const newText = (newAction === 'add') ? 'Add to Cart' : 'Remove ✖️';
+                    const newUrl = (newAction === 'add') ? this.dataset.addUrl : this.dataset.removeUrl;
+                    
+                    // Re-render button properties
+                    this.className = `btn btn-sm ${newClass}`;
+                    this.dataset.action = newAction;
+                    this.innerHTML = newText;
+                    
+                    // Handle URL replacement if necessary (though the old ones are kept as data-* attributes)
+                    
+                    // Update the floating cart widget
+                    cartCount.textContent = data.mixed_sale_count;
+                    
+                    if (data.mixed_sale_count > 0) {
+                        cartWidget.style.opacity = 1;
+                        cartWidget.style.pointerEvents = 'auto';
+                    } else {
+                        cartWidget.style.opacity = 0;
+                        cartWidget.style.pointerEvents = 'none';
+                    }
 
-                        // Display a temporary success message
-                        const tempMessage = document.createElement('div');
-                        tempMessage.className = 'alert alert-success fixed-top m-3';
-                        tempMessage.textContent = data.message;
-                        document.body.appendChild(tempMessage);
-                        setTimeout(() => tempMessage.remove(), 3000); 
+                    // Display a temporary success message
+                    const tempMessage = document.createElement('div');
+                    tempMessage.className = 'alert alert-success fixed-top m-3';
+                    tempMessage.textContent = data.message;
+                    document.body.appendChild(tempMessage);
+                    setTimeout(() => tempMessage.remove(), 3000); 
 
-                    } else {
-                        alert('Error adding asset: ' + data.message);
-                    }
-                })
-                .catch(error => console.error('Error:', error));
-            });
-        });
-    });
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        });
+    });
+});
 </script>
 {% endblock extra_js %}

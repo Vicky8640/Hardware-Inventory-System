@@ -1,6 +1,7 @@
 # inventory/models.py
 from django.db import models
 from decimal import Decimal
+from django import forms
 # --- 1. Asset Types Model ---
 class AssetType(models.Model):
     name = models.CharField(max_length=50, unique=True)
@@ -47,7 +48,13 @@ class HardwareAsset(models.Model):
         # related_name is optional, but helps. If you remove it, the reverse name is 'salerecord_set'
         related_name='sold_assets' 
     )
-    
+    mixed_sale = models.ForeignKey(
+        'MixedSale', # <-- Links to the correct model instance
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='mixed_sale_assets' # Use a different related_name
+    )
     # Field to store the final price this specific unit was sold for
     individual_sale_price = models.DecimalField(
         max_digits=10, 
@@ -101,6 +108,24 @@ class MaintenanceLog(models.Model):
     def __str__(self):
         return f"Log for {self.asset.serial_number} on {self.log_date}"
 
+class MixedSale(models.Model):
+    # This model stores the summary of the mixed asset sale transaction.
+    total_sale_price = models.DecimalField(max_digits=10, decimal_places=2)
+    total_purchase_cost = models.DecimalField(max_digits=10, decimal_places=2)
+    sale_date = models.DateTimeField(auto_now_add=True)
+    # user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    # You might want to add a field for notes or customer info
+
+    def calculate_profit(self):
+        return self.total_sale_price - self.total_purchase_cost
+
+    def __str__(self):
+        return f"Mixed Sale #{self.pk} on {self.sale_date.strftime('%Y-%m-%d')}"
+
+    class Meta:
+        verbose_name = "Mixed Asset Sale"
+        verbose_name_plural = "Mixed Asset Sales"
 
 class SaleRecord(models.Model):
     SALE_TYPE_CHOICES = [
@@ -144,3 +169,4 @@ class SaleRecord(models.Model):
     def profit_loss(self):
         # Calculate profit/loss for the entire transaction
         return self.total_sale_price - self.total_purchase_cost
+

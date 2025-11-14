@@ -26,19 +26,25 @@
                 {% csrf_token %} 
                 
                 <div class="row g-3">
-                    <div class="col-md-6">
+                    <div class="col-md-4"> 
                         {{ form.asset_type.label_tag }}
                         {{ form.asset_type|add_class:"form-select" }}
                         <div class="invalid-feedback">{{ form.asset_type.errors }}</div>
                     </div>
 
-                    <div class="col-md-3">
+                    <div class="col-md-4">
+                        {{ form.location.label_tag }}
+                        {{ form.location|add_class:"form-select" }}
+                        <div class="invalid-feedback">{{ form.location.errors }}</div>
+                    </div>
+
+                    <div class="col-md-2">
                         {{ form.quantity.label_tag }}
                         {{ form.quantity|add_class:"form-control" }}
                         <div class="invalid-feedback">{{ form.quantity.errors }}</div>
                     </div>
 
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         {{ form.unit_sale_price.label_tag }}
                         <div class="input-group">
                             <span class="input-group-text">$</span>
@@ -47,7 +53,7 @@
                         <div class="invalid-feedback">{{ form.unit_sale_price.errors }}</div>
                     </div>
                 </div>
-
+                
                 <div class="alert alert-info mt-4 p-3 d-flex justify-content-between align-items-center">
                     <strong class="fs-5">Total Sale Amount:</strong>
                     <span class="fs-4 fw-bold text-success" id="totalSaleAmount">$0.00</span>
@@ -57,7 +63,7 @@
                     <i class="bi bi-box-arrow-in-right me-2"></i> Confirm Sale and Mark Items as Sold
                 </button>
             </form>
-        </div>
+            </div>
     </div>
 </div>
 
@@ -69,6 +75,9 @@
         const totalDisplay = document.getElementById('totalSaleAmount');
 
         function calculateTotal() {
+            // Check if elements exist before reading values (for safety)
+            if (!quantityInput || !priceInput || !totalDisplay) return;
+
             const quantity = parseInt(quantityInput.value) || 0;
             // Use parseFloat to handle decimal input
             const price = parseFloat(priceInput.value) || 0.00; 
