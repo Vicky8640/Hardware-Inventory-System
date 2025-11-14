@@ -1,1 +1,1 @@
-web: gunicorn HMS_PROJECT.wsgi
+web: gunicorn Hms_Project.wsgi
