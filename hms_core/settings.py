@@ -24,8 +24,18 @@ SECRET_KEY = 'django-insecure-o^3j+0zo8d+6r+r^uek%ibbmnz5$u1+or7e&cn--u_$n8t)yz#
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
+# Hms_Project/settings.py
 
-ALLOWED_HOSTS = []
+# 1. Security/Host Check
+ALLOWED_HOSTS = ['hms-inventory-app.onrender.com', '127.0.0.1']
+
+# 2. Static Files (Crucial for CSS/JS/Images)
+# This setting tells Django where to collect static files when you run collectstatic
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATIC_URL = '/static/'
+STATICFILES_DIRS = [
+    # Any custom static directories here
+]
 
 
 # Application definition
