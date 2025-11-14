@@ -1,0 +1,1 @@
+web: gunicorn HMS_PROJECT.wsgi
